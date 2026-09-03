@@ -13,7 +13,7 @@ hide:
             PBE_26.1_8001_I
         </div>
         <div class="card-content">
-            <p class="contributors">Miguel Esteves, Kaue Fernandes, Miguel Figueira, Rodrigo Aquino</p>
+            <p class="contributors">Miguel Esteves, Kaue Fernandes, Miguel Figueira</p>
             <a href="https://github.com/Projetos-de-Extensao/PBE_26.2_8002_I" class="button primary-btn">
                 <span class="octicon-arrow-right-24:"></span> Ver Repositório
             </a>
