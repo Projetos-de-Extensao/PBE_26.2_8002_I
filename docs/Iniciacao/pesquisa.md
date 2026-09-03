@@ -15,7 +15,7 @@ title: Pesquisa
 ### **2. Pesquisa**
 
 **Problema**
-Profissionais como personal trainers, nutricionistas e fisioterapeutas frequentemente utilizam ferramentas separadas para agenda, comunicação, clientes, pagamentos e controle de espaços. Isso pode gerar conflitos de horário, retrabalho, falta de visibilidade e dificuldade de coordenação quando um mesmo cliente é acompanhado por mais de um profissional.
+Profissionais como personal trainers, nutricionistas, fisioterapeutas e psicologos frequentemente utilizam ferramentas separadas para agenda, comunicação, clientes, pagamentos e controle de espaços. Isso pode gerar conflitos de horário, retrabalho, falta de visibilidade e dificuldade de coordenação quando um mesmo cliente é acompanhado por mais de um profissional.
 
 **Solução proposta**
 Criar uma plataforma única em que o cliente possa:
