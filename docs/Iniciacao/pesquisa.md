@@ -64,16 +64,16 @@ Quinta	10:00	Fisioterapeuta
 Sexta	16:00	Personal trainer
 
 **Controle de privilégios**
-**Cliente**
+*Cliente*
 Pode pesquisar profissionais, agendar, reagendar, cancelar e consultar seus próprios atendimentos.
 
-**Profissional**
+*Profissional*
 Pode configurar disponibilidade, visualizar sua agenda, confirmar atendimentos, bloquear horários e acompanhar seus próprios clientes.
 
-**Recepcionista**
+*Recepcionista*
 Pode apoiar o cadastro e a operação da agenda, sem acesso administrativo completo.
 
-**Administrador**
+*Administrador*
 Pode gerenciar usuários, profissionais, serviços, espaços, permissões e relatórios.
 
 **Automação e recorrência**
