@@ -117,3 +117,61 @@ validação de conflitos;
 cadastro básico de espaços.
 
 ---
+### **3. Aplicativos similares**
+
+Foram analisadas soluções já existentes que atendem parte do problema, com base nas funcionalidades divulgadas publicamente por cada produto. O objetivo é identificar o que já é bem resolvido pelo mercado e quais lacunas justificam a proposta.
+
+**Calendly**
+Ferramenta de agendamento online genérica. O profissional compartilha um link e o cliente escolhe um horário livre, com integração a calendários como Google Agenda e Outlook.
+
+- Pontos fortes: simplicidade, sincronização com calendários externos, lembretes automáticos.
+- Limitações para o tema: não é voltada a academias ou clínicas, não controla salas e equipamentos compartilhados e não oferece ao cliente uma agenda única com vários profissionais de especialidades diferentes.
+
+**Doctoralia**
+Marketplace de profissionais de saúde em que o paciente pesquisa por especialidade e localização, consulta avaliações e agenda consultas.
+
+- Pontos fortes: busca por especialidade, perfil do profissional com avaliações, lembretes de consulta.
+- Limitações para o tema: foco em consultas de saúde, sem contemplar personal trainers e rotinas de treino; não gerencia espaços físicos compartilhados de um estabelecimento.
+
+**Tecnofit**
+Sistema brasileiro de gestão para academias e boxes, com controle de alunos, planos, financeiro, check-in e reserva de aulas.
+
+- Pontos fortes: voltado ao contexto de academia, gestão administrativa e financeira, aplicativo para o aluno.
+- Limitações para o tema: foco na gestão do negócio e em aulas/turmas; o agendamento individual entre cliente e diferentes profissionais (nutricionista, fisioterapeuta, personal) não é o centro da solução.
+
+**Trainerize**
+Aplicativo para personal trainers acompanharem clientes, com prescrição de treinos, acompanhamento de progresso, mensagens e agendamento de sessões.
+
+- Pontos fortes: acompanhamento do cliente pelo profissional, recorrência de sessões, aplicativo mobile.
+- Limitações para o tema: centrado no treinamento físico; não integra outras especialidades nem controla salas e recursos compartilhados.
+
+**Mindbody**
+Plataforma de gestão para estúdios, academias e centros de bem-estar, com agendamento de aulas e serviços, gestão de equipe e pagamentos.
+
+- Pontos fortes: solução mais próxima do tema, cobrindo serviços, profissionais e agendamento em estabelecimentos.
+- Limitações para o tema: produto pago e voltado principalmente ao mercado internacional, com grande quantidade de funcionalidades administrativas que aumentam a complexidade para estabelecimentos menores.
+
+**Práticas manuais (WhatsApp, planilhas e agendas de papel)**
+Ainda são muito usadas por profissionais autônomos e pequenos estabelecimentos.
+
+- Pontos fortes: custo zero e familiaridade.
+- Limitações para o tema: não detectam conflitos, geram retrabalho, dependem de troca de mensagens para reagendar e não oferecem visão consolidada da agenda.
+
+**Comparativo**
+
+| Funcionalidade | Calendly | Doctoralia | Tecnofit | Trainerize | Mindbody | Proposta |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| Agendamento online pelo cliente | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Busca por especialidade | ❌ | ✅ | ❌ | ❌ | Parcial | ✅ |
+| Agenda única com várias especialidades | ❌ | ❌ | ❌ | ❌ | Parcial | ✅ |
+| Controle de salas e equipamentos | ❌ | ❌ | Parcial | ❌ | Parcial | ✅ |
+| Sessões recorrentes | Parcial | ❌ | ✅ | ✅ | ✅ | ✅ |
+| Permissões por papel (cliente, profissional, recepção, admin) | Parcial | Parcial | ✅ | Parcial | ✅ | ✅ |
+| Foco em academia + saúde + bem-estar | ❌ | ❌ | Parcial | Parcial | ✅ | ✅ |
+
+> Observação: o comparativo reflete a análise da equipe a partir das informações públicas dos produtos e deve ser revisado caso as ferramentas sejam testadas diretamente.
+
+**Conclusão da análise**
+Cada solução resolve bem uma parte do problema: agendamento genérico (Calendly), busca de profissionais de saúde (Doctoralia), gestão de academia (Tecnofit), acompanhamento de treino (Trainerize) ou gestão completa de estúdios (Mindbody). Nenhuma delas, porém, combina de forma simples a agenda multidisciplinar do cliente com a validação de conflitos entre profissional, sala e recurso dentro de uma academia. Essa lacuna confirma o diferencial da proposta e reforça as prioridades do MVP.
+
+---
