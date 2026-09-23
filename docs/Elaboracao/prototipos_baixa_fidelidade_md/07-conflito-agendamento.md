@@ -1,0 +1,24 @@
+# Tela de Conflito de Agendamento
+
+```plantuml
+@startsalt
+{
+  <b>Conflito de Agendamento
+  ..
+
+  O horário solicitado não está disponível.
+
+  ..
+
+  Profissional: "Ana Silva"
+  Horário: "16:00 - 17:00"
+  Conflito: "Sala 2 ocupada"
+
+  ..
+
+  [ Escolher outro horário ]
+  [ Alterar sala ]
+  [ Cancelar ]
+}
+@endsalt
+```

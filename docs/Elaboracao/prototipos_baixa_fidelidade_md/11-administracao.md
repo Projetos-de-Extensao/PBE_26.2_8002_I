@@ -1,0 +1,38 @@
+# Tela de Administração de Sala e Recurso
+
+```plantuml
+@startsalt
+{
+  <b>Administração
+  ..
+
+  [ Cadastrar profissional ]
+  [ Cadastrar serviço ]
+  [ Cadastrar sala ]
+  [ Cadastrar recurso ]
+  [ Definir permissões ]
+
+  ..
+
+  <b>Salas
+  ..
+
+  Sala 1 | 4 pessoas
+  Sala 2 | 6 pessoas
+  Sala 3 | 2 pessoas
+
+  ..
+
+  <b>Recursos
+  ..
+
+  Kettlebell | Exclusivo
+  Step | Compartilhado
+  Tapis | Compartilhado
+
+  ..
+
+  [ Salvar ]
+}
+@endsalt
+```

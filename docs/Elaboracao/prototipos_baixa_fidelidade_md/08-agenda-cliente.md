@@ -1,0 +1,24 @@
+# Tela da Agenda do Cliente
+
+```plantuml
+@startsalt
+{
+  <b>Minha Agenda
+  ..
+
+  Mês: "Outubro 2026"
+
+  ..
+
+  10/10 | 16:00 - 17:00 | Avaliação Física | Ana Silva | Confirmado
+  12/10 | 09:00 - 09:50 | Consulta Nutricional | Carla Nunes | Confirmado
+  15/10 | 14:00 - 15:00 | Fisioterapia | Bruno Costa | Pendente
+
+  ..
+
+  [ Novo agendamento ]
+  [ Cancelar ]
+  [ Reagendar ]
+}
+@endsalt
+```
