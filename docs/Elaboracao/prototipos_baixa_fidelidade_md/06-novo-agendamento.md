@@ -1,0 +1,29 @@
+# Tela de Novo Agendamento
+
+```plantuml
+@startsalt
+{
+  <b>Novo Agendamento
+  ..
+
+  Cliente | "João Pereira"
+  Serviço | "Avaliação Física"
+  Profissional | "Ana Silva"
+  Sala | "Sala 2"
+  Recurso | "Mancal / Kettlebell"
+  Data | "10/10/2026"
+  Horário | "16:00 - 17:00"
+  Status | "Disponível"
+
+  ..
+
+  [ ] Repetir semanalmente
+  Até | "10/12/2026"
+
+  ..
+
+  [ Verificar disponibilidade ]
+  [ Confirmar agendamento ]
+}
+@endsalt
+```

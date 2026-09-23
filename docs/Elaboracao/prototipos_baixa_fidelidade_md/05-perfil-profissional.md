@@ -1,0 +1,36 @@
+# Tela de Perfil do Profissional
+
+```plantuml
+@startsalt
+{
+  <b>Perfil do Profissional
+  ..
+
+  Nome: "Ana Silva"
+  Especialidade: "Personal Trainer"
+  Formação: "Educação Física"
+  Descrição: "Treinamento funcional e emagrecimento"
+
+  ..
+
+  <b>Serviços
+  ..
+
+  Avaliação Física | 60 min
+  Treino Funcional | 50 min
+  Reabilitação | 45 min
+
+  ..
+
+  <b>Disponibilidade
+  ..
+
+  Seg - Sex | 08:00 - 18:00
+
+  ..
+
+  [ Escolher serviço ]
+  [ Voltar ]
+}
+@endsalt
+```

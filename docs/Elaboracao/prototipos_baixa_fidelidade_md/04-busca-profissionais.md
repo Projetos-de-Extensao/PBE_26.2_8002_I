@@ -1,0 +1,31 @@
+# Tela de Busca de Profissionais
+
+```plantuml
+@startsalt
+{
+  <b>Buscar Profissionais
+  ..
+
+  Especialidade | "Todos"
+  Local | "São Paulo"
+  Data | "10/10/2026"
+
+  ..
+
+  [ Buscar ]
+
+  ..
+
+  <b>Resultados
+  ..
+
+  Ana Silva | Personal Trainer | 4.9 | Disponível
+  Carla Nunes | Nutricionista | 4.8 | Disponível
+  Bruno Costa | Fisioterapeuta | 4.7 | Disponível
+
+  ..
+
+  [ Ver perfil ]
+}
+@endsalt
+```
