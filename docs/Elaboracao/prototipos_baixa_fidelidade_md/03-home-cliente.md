@@ -1,0 +1,28 @@
+# Tela Inicial do Cliente
+
+```plantuml
+@startsalt
+{
+  <b>Home do Cliente
+  ..
+
+  [ Buscar profissionais ]
+  [ Serviços ]
+  [ Minha agenda ]
+  [ Perfil ]
+
+  ..
+
+  <b>Profissionais em destaque
+  ..
+
+  Ana Silva | Personal Trainer
+  Carla Nunes | Nutricionista
+  Bruno Costa | Fisioterapeuta
+
+  ..
+
+  [ Agendar ]
+}
+@endsalt
+```

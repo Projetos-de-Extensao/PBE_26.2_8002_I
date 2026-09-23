@@ -1,0 +1,19 @@
+# Tela de Login
+
+```plantuml
+@startsalt
+{
+  <b>Login
+  ..
+
+  E-mail | "cliente@exemplo.com"
+  Senha | "********"
+
+  ..
+
+  [ Entrar ]
+  [ Cadastrar ]
+  [ Esqueci minha senha ]
+}
+@endsalt
+```
