@@ -21,19 +21,20 @@ nav:
       - Casos de Uso: Elaboracao/casos_de_uso.md
       - Diagrama de Classes: Elaboracao/diagrama_de_classes.md
       - Diagrama de Sequência: Elaboracao/diagrama_de_sequencia.md
-        - Protótipos de Baixa Fidelidade:
-          - Index: Elaboracao/prototipos_baixa_fidelidade/index.md
-          - Login: Elaboracao/prototipos_baixa_fidelidade/01-login.md
-          - Cadastro de Usuário: Elaboracao/prototipos_baixa_fidelidade/02-cadastro-usuario.md
-          - Home do Cliente: Elaboracao/prototipos_baixa_fidelidade/03-home-cliente.md
-          - Busca de Profissionais: Elaboracao/prototipos_baixa_fidelidade/04-busca-profissionais.md
-          - Perfil do Profissional: Elaboracao/prototipos_baixa_fidelidade/05-perfil-profissional.md
-          - Novo Agendamento: Elaboracao/prototipos_baixa_fidelidade/06-novo-agendamento.md
-          - Conflito de Agendamento: Elaboracao/prototipos_baixa_fidelidade/07-conflito-agendamento.md
-          - Agenda do Cliente: Elaboracao/prototipos_baixa_fidelidade/08-agenda-cliente.md
-          - Painel do Profissional: Elaboracao/prototipos_baixa_fidelidade/09-painel-profissional.md
-          - Disponibilidade e Bloqueio: Elaboracao/prototipos_baixa_fidelidade/10-disponibilidade-bloqueio.md
-          - Administração: Elaboracao/prototipos_baixa_fidelidade/11-administracao.md
+      - Regras de Negócio: Elaboracao/regras-de-negocio.md
+      - Protótipos de Baixa Fidelidade:
+          - Index: Elaboracao/prototipos_baixa_fidelidade_md/index.md
+          - Login: Elaboracao/prototipos_baixa_fidelidade_md/01-login.md
+          - Cadastro de Usuário: Elaboracao/prototipos_baixa_fidelidade_md/02-cadastro-usuario.md
+          - Home do Cliente: Elaboracao/prototipos_baixa_fidelidade_md/03-home-cliente.md
+          - Busca de Profissionais: Elaboracao/prototipos_baixa_fidelidade_md/04-busca-profissionais.md
+          - Perfil do Profissional: Elaboracao/prototipos_baixa_fidelidade_md/05-perfil-profissional.md
+          - Novo Agendamento: Elaboracao/prototipos_baixa_fidelidade_md/06-novo-agendamento.md
+          - Conflito de Agendamento: Elaboracao/prototipos_baixa_fidelidade_md/07-conflito-agendamento.md
+          - Agenda do Cliente: Elaboracao/prototipos_baixa_fidelidade_md/08-agenda-cliente.md
+          - Painel do Profissional: Elaboracao/prototipos_baixa_fidelidade_md/09-painel-profissional.md
+          - Disponibilidade e Bloqueio: Elaboracao/prototipos_baixa_fidelidade_md/10-disponibilidade-bloqueio.md
+          - Administração: Elaboracao/prototipos_baixa_fidelidade_md/11-administracao.md
   - Construção:
       - Index: Construcao/index.md
       - Github Workflows: Construcao/github_workflows.md
