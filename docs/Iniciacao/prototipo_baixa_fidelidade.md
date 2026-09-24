@@ -16,8 +16,7 @@ Iniciamos o projeto através dos levantamentos iniciais da equipe, após discuss
 
 ## Protótipo de alta fidelidade
 
-![alt text](image.png)
-
+![alt text](image-1.png)
 ## Conclusão
 
 <p align = "justify">
