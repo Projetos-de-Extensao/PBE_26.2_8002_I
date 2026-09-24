@@ -17,10 +17,10 @@ Este documento define, para o projeto real, um modelo que evolui do Diagrama de 
 
 ## Fontes de entrada obrigatórias
 
-- [Levantamento de requisitos](./requisitos-funcionais.md) e [requisitos não funcionais](./requisitos-nao-funcionais.md).
+- [Levantamento de requisitos](./levreq.md#2-requisitos-funcionais) e [requisitos não funcionais](./levreq.md#3-requisitos-nao-funcionais).
 - [Casos de uso](./casos_de_uso.md): atores, fluxos principal e alternativos (UC01 a UC05).
 - Diagrama de casos de uso: escopo e fronteiras do sistema (seção 5 de [Casos de uso](./casos_de_uso.md)).
-- [Protótipo de baixa fidelidade](./prototipo_baixa_fidelidade.md): entidades percebidas na interface e regras de navegação.
+- [Protótipo de baixa fidelidade](./prototipos_baixa_fidelidade_md/index.md): entidades percebidas na interface e regras de navegação.
 - [Regras de negócio](./regras-de-negocio.md): restrições que os relacionamentos e atributos precisam respeitar.
 
 ## 1) Diagrama de Classes Conceitual
@@ -357,13 +357,13 @@ O modelo conceitual e o modelo de especificação apresentados cobrem todas as e
 
 > [Casos de uso](./casos_de_uso.md)
 
-> [Requisitos funcionais](./requisitos-funcionais.md)
+> [Requisitos funcionais](./levreq.md#2-requisitos-funcionais)
 
-> [Requisitos não funcionais](./requisitos-nao-funcionais.md)
+> [Requisitos não funcionais](./levreq.md#3-requisitos-nao-funcionais)
 
 > [Regras de negócio](./regras-de-negocio.md)
 
-> [Protótipo de baixa fidelidade](./prototipo_baixa_fidelidade.md)
+> [Protótipo de baixa fidelidade](./prototipos_baixa_fidelidade_md/index.md)
 
 ## Autor(es)
 

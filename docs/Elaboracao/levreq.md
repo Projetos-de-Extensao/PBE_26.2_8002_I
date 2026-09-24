@@ -12,7 +12,7 @@ Este documento aplica ao projeto real — a Plataforma Web de Agendamento Multid
 ## Metodologia
 
 <p align = "justify">
-O conteúdo foi derivado da <a href="./pesquisa.md">pesquisa do tema</a>, do <a href="./documento_de_visao.md">documento de visão</a>, dos <a href="./requisitos-funcionais.md">requisitos funcionais</a>, dos <a href="./requisitos-nao-funcionais.md">requisitos não funcionais</a>, das <a href="./regras-de-negocio.md">regras de negócio</a> e do <a href="./prototipo_baixa_fidelidade.md">protótipo de baixa fidelidade</a>, seguindo a estrutura de roteiro: stakeholders, requisitos, caso de uso detalhado, diagrama, protótipo e validação.
+O conteúdo foi derivado da <a href="../Iniciacao/pesquisa.md">pesquisa do tema</a>, do <a href="../Iniciacao/documento_de_visao.md">documento de visão</a>, dos <a href="#2-requisitos-funcionais">requisitos funcionais</a>, dos <a href="#3-requisitos-nao-funcionais">requisitos não funcionais</a>, das <a href="./regras-de-negocio.md">regras de negócio</a> e do <a href="./prototipos_baixa_fidelidade_md/index.md">protótipo de baixa fidelidade</a>, seguindo a estrutura de roteiro: stakeholders, requisitos, caso de uso detalhado, diagrama, protótipo e validação.
 </p>
 
 ## 1. Identificação dos Stakeholders
@@ -54,7 +54,7 @@ O conteúdo foi derivado da <a href="./pesquisa.md">pesquisa do tema</a>, do <a 
 | RF25 | A recepção deve poder criar, reagendar ou cancelar agendamentos dentro de suas permissões. | Média |
 | RF26 | O sistema deve informar o motivo de um conflito e permitir nova seleção de horário. | Alta |
 
-> Prioridades alinhadas ao [backlog inicial](./backlog-inicial.md).
+> Prioridades alinhadas ao [backlog do projeto](../Construcao/github_projects.md).
 
 ## 3. Requisitos Não Funcionais
 
@@ -235,7 +235,7 @@ end note
 ## 6. Protótipo
 
 <p align = "justify">
-As telas mínimas para os fluxos acima já estão descritas no <a href="./prototipo_baixa_fidelidade.md">protótipo de baixa fidelidade</a> (Login, Cadastro, Home do Cliente, Buscar Profissionais, Perfil do Profissional, Novo Agendamento, Conflito de Agendamento, Minha Agenda, Painel do Profissional e Administração). Abaixo, um wireframe complementar em notação Salt (PlantUML) para a tela de Novo Agendamento, ponto central do UC02:
+As telas mínimas para os fluxos acima já estão descritas no <a href="./prototipos_baixa_fidelidade_md/index.md">protótipo de baixa fidelidade</a> (Login, Cadastro, Home do Cliente, Buscar Profissionais, Perfil do Profissional, Novo Agendamento, Conflito de Agendamento, Minha Agenda, Painel do Profissional e Administração). Abaixo, um wireframe complementar em notação Salt (PlantUML) para a tela de Novo Agendamento, ponto central do UC02:
 </p>
 
 ```plantuml
@@ -270,19 +270,19 @@ Este documento traduz a pesquisa e os requisitos do projeto em casos de uso conc
 
 ## Referências
 
-> [Pesquisa do tema](./pesquisa.md)
+> [Pesquisa do tema](../Iniciacao/pesquisa.md)
 
-> [Documento de visão](./documento_de_visao.md)
+> [Documento de visão](../Iniciacao/documento_de_visao.md)
 
-> [Requisitos funcionais](./requisitos-funcionais.md)
+> [Requisitos funcionais](#2-requisitos-funcionais)
 
-> [Requisitos não funcionais](./requisitos-nao-funcionais.md)
+> [Requisitos não funcionais](#3-requisitos-nao-funcionais)
 
 > [Regras de negócio](./regras-de-negocio.md)
 
-> [Protótipo de baixa fidelidade](./prototipo_baixa_fidelidade.md)
+> [Protótipo de baixa fidelidade](./prototipos_baixa_fidelidade_md/index.md)
 
-> [Backlog inicial](./backlog-inicial.md)
+> [Backlog no GitHub Projects](../Construcao/github_projects.md)
 
 ## Autor(es)
 
