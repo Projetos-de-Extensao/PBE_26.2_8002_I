@@ -11,6 +11,7 @@ colorama==0.4.6
 comm==0.2.3
 csscompressor==0.9.5
 debugpy==1.8.20
+Django==6.1.2
 decorator==5.2.1
 defusedxml==0.7.1
 executing==2.2.1
