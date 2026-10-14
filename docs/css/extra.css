@@ -110,3 +110,8 @@ h6 {
     background-color: #0b469f; /* Lighter shade on hover */
     
 }
+.md-header__button.md-logo img,
+.md-header__button.md-logo svg {
+  height: 1.8rem;
+  width: auto;
+}
