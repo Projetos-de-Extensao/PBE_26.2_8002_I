@@ -1,0 +1,35 @@
+@startuml
+title Classes de Análise - Plataforma de Agendamento Multidisciplinar
+
+class Usuario {
+    +id: int
+    +username: string
+    +email: string
+}
+
+class Profissional {
+    +id: int
+    +especialidade: string
+    +registro_profissional: string
+    +telefone: string
+    +modalidade: string
+    +descricao: text
+    +ativo: boolean
+}
+
+class Agendamento {
+    +id: int
+    +servico: string
+    +data: date
+    +hora_inicio: time
+    +hora_fim: time
+    +status: string
+    +observacao: text
+    +criado_em: datetime
+}
+
+Usuario "1" -- "0..1" Profissional : possui perfil
+Usuario "1" -- "0..*" Agendamento : realiza como cliente
+Profissional "1" -- "0..*" Agendamento : atende
+
+@enduml
