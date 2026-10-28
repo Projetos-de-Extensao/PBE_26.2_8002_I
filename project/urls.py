@@ -15,7 +15,6 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
-from django.contrib import admin
 from django.contrib.auth.views import LogoutView
 from django.contrib.auth.views import (
     PasswordResetCompleteView,
@@ -26,15 +25,18 @@ from django.contrib.auth.views import (
 from django.urls import path, reverse_lazy
 
 from agendamento.views import (
+    AgendaClienteView,
     CadastroView,
     LoginView,
     NovoAgendamentoView,
     ProfissionalDetailView,
     ProfissionalListView,
+    CancelarAgendamentoView,
 )
+from agendamento.admin_site import admin_site
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
+    path("admin/", admin_site.urls),
     path("", LoginView.as_view(), name="login"),
     path("cadastrar/", CadastroView.as_view(), name="cadastro"),
     path(
@@ -51,6 +53,16 @@ urlpatterns = [
         "agendar/<int:servico_id>/",
         NovoAgendamentoView.as_view(),
         name="novo_agendamento",
+    ),
+    path(
+        "minha-agenda/",
+        AgendaClienteView.as_view(),
+        name="minha_agenda",
+    ),
+    path(
+        "minha-agenda/<int:pk>/cancelar/",
+        CancelarAgendamentoView.as_view(),
+        name="cancelar_agendamento",
     ),
     path(
         "senha/redefinir/",

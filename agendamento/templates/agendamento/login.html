@@ -5,6 +5,9 @@
     <h1>Acesso realizado</h1>
     <p class="success">Você está conectado como {{ user.email }}.</p>
     <a class="text-link" href="{% url 'profissionais' %}">Ver profissionais</a>
+    {% if user.perfil.papel == "cliente" %}
+      <a class="text-link" href="{% url 'minha_agenda' %}">Minha agenda</a>
+    {% endif %}
     <form method="post" action="{% url 'logout' %}">
       {% csrf_token %}
       <button type="submit">Sair</button>
