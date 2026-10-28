@@ -15,6 +15,7 @@ from agendamento.models import (
     Perfil,
     Profissional,
     Recepcionista,
+    Sala,
     Servico,
     Usuario,
 )
@@ -314,6 +315,183 @@ class PerfilModelTests(TestCase):
         usuario = Usuario.objects.get(email="novo@exemplo.com")
         self.assertEqual(usuario.perfil.papel, Perfil.Papel.CLIENTE)
         self.assertContains(response, "Novo Cliente")
+
+
+class ControleAcessoTests(TestCase):
+    def setUp(self):
+        self.papel_cliente = Papel.objects.create(nome="Cliente")
+        self.cliente = Cliente.objects.create_user(
+            email="cliente@exemplo.com",
+            password="Senha#Forte123",
+            nome="Cliente",
+        )
+        self.profissional = Profissional.objects.create_user(
+            email="profissional@exemplo.com",
+            password="Senha#Forte123",
+            nome="Profissional",
+            especialidade="Fisioterapia",
+        )
+        self.recepcionista = Recepcionista.objects.create_user(
+            email="recepcionista@exemplo.com",
+            password="Senha#Forte123",
+            nome="Recepcionista",
+        )
+        self.recepcionista.is_staff = True
+        self.recepcionista.save(update_fields=["is_staff"])
+        self.administrador = Usuario.objects.create_superuser(
+            email="admin@exemplo.com",
+            password="Senha#Forte123",
+            nome="Administrador",
+        )
+        self.servico = Servico.objects.create(
+            profissional=self.profissional,
+            nome="Consulta",
+            tipo="Atendimento",
+            duracao_minutos=60,
+        )
+        self.sala = Sala.objects.create(nome="Sala 1", capacidade=2)
+        inicio = timezone.now() + timedelta(days=2)
+        self.agendamento_cliente = Agendamento.objects.create(
+            cliente=self.cliente,
+            profissional=self.profissional,
+            servico=self.servico,
+            data_hora_inicio=inicio,
+            data_hora_fim=inicio + timedelta(hours=1),
+        )
+        outro_cliente = Cliente.objects.create_user(
+            email="outro@exemplo.com",
+            password="Senha#Forte123",
+            nome="Outro cliente",
+        )
+        self.agendamento_alheio = Agendamento.objects.create(
+            cliente=outro_cliente,
+            profissional=self.profissional,
+            servico=self.servico,
+            data_hora_inicio=inicio + timedelta(days=1),
+            data_hora_fim=inicio + timedelta(days=1, hours=1),
+        )
+
+    def test_usuario_comum_recebe_mensagem_de_acesso_negado_no_admin(self):
+        self.client.force_login(self.cliente)
+
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(response, "Acesso negado", status_code=403)
+
+    def test_recepcionista_nao_acessa_cadastros_administrativos(self):
+        self.client.force_login(self.recepcionista)
+
+        for rota in (
+            "admin:index",
+            "admin:agendamento_profissional_changelist",
+            "admin:agendamento_servico_changelist",
+            "admin:agendamento_sala_changelist",
+        ):
+            with self.subTest(rota=rota):
+                response = self.client.get(reverse(rota))
+                self.assertEqual(response.status_code, 403)
+                self.assertContains(response, "Acesso negado", status_code=403)
+
+    def test_administrador_pode_gerenciar_profissional_servico_e_sala(self):
+        self.client.force_login(self.administrador)
+
+        for rota in (
+            "admin:agendamento_profissional_changelist",
+            "admin:agendamento_servico_changelist",
+            "admin:agendamento_sala_changelist",
+        ):
+            with self.subTest(rota=rota):
+                response = self.client.get(reverse(rota))
+                self.assertEqual(response.status_code, 200)
+
+    def test_administrador_pode_cadastrar_profissional(self):
+        self.client.force_login(self.administrador)
+        response = self.client.post(
+            reverse("admin:agendamento_profissional_add"),
+            {
+                "email": "novo-profissional@exemplo.com",
+                "nome": "Novo profissional",
+                "especialidade": "Nutrição",
+                "formacao": "Nutrição clínica",
+                "apresentacao": "Atendimento nutricional.",
+                "password1": "Senha#Segura984",
+                "password2": "Senha#Segura984",
+                "_save": "Salvar",
+            },
+            follow=True,
+        )
+
+        profissional = Profissional.objects.get(
+            email="novo-profissional@exemplo.com"
+        )
+        self.assertEqual(
+            profissional.perfil.papel,
+            Perfil.Papel.PROFISSIONAL,
+        )
+        self.assertTrue(profissional.check_password("Senha#Segura984"))
+        self.assertContains(response, "Novo profissional")
+
+    def test_cliente_visualiza_apenas_sua_agenda(self):
+        self.client.force_login(self.cliente)
+
+        response = self.client.get(reverse("minha_agenda"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            timezone.localtime(
+                self.agendamento_cliente.data_hora_inicio
+            ).strftime("%d/%m/%Y"),
+        )
+        self.assertNotContains(
+            response,
+            timezone.localtime(
+                self.agendamento_alheio.data_hora_inicio
+            ).strftime("%d/%m/%Y"),
+        )
+
+    def test_cliente_nao_pode_cancelar_agendamento_de_outra_pessoa(self):
+        self.client.force_login(self.cliente)
+
+        response = self.client.post(
+            reverse(
+                "cancelar_agendamento",
+                args=[self.agendamento_alheio.pk],
+            )
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.agendamento_alheio.refresh_from_db()
+        self.assertEqual(
+            self.agendamento_alheio.status,
+            Agendamento.Status.AGENDADO,
+        )
+
+    def test_cliente_pode_cancelar_somente_agendamento_proprio(self):
+        self.client.force_login(self.cliente)
+
+        response = self.client.post(
+            reverse(
+                "cancelar_agendamento",
+                args=[self.agendamento_cliente.pk],
+            )
+        )
+
+        self.assertRedirects(response, reverse("minha_agenda"))
+        self.agendamento_cliente.refresh_from_db()
+        self.assertEqual(
+            self.agendamento_cliente.status,
+            Agendamento.Status.CANCELADO,
+        )
+
+    def test_profissional_e_recepcionista_nao_acessam_agenda_de_cliente(self):
+        for usuario in (self.profissional, self.recepcionista):
+            with self.subTest(papel=usuario.perfil.papel):
+                self.client.force_login(usuario)
+                response = self.client.get(reverse("minha_agenda"))
+                self.assertEqual(response.status_code, 403)
+                self.assertContains(response, "Acesso negado", status_code=403)
 
 
 @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
