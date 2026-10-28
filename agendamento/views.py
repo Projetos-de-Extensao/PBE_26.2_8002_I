@@ -193,6 +193,12 @@ class CadastroForm(forms.Form):
         required=False,
         widget=forms.TextInput(attrs={"autocomplete": "organization-title"}),
     )
+    modalidade = forms.ChoiceField(
+        label=_("Modalidade de atendimento"),
+        choices=Profissional.Modalidade.choices,
+        required=False,
+        initial=Profissional.Modalidade.PRESENCIAL,
+    )
     senha = forms.CharField(
         label=_("Senha"),
         strip=False,
@@ -219,6 +225,14 @@ class CadastroForm(forms.Form):
             self.add_error(
                 "especialidade",
                 _("Informe sua especialidade profissional."),
+            )
+        if (
+            cleaned_data.get("papel") == Perfil.Papel.PROFISSIONAL
+            and not cleaned_data.get("modalidade")
+        ):
+            self.add_error(
+                "modalidade",
+                _("Informe a modalidade de atendimento."),
             )
         senha = cleaned_data.get("senha")
         confirmar_senha = cleaned_data.get("confirmar_senha")
@@ -248,6 +262,7 @@ class CadastroForm(forms.Form):
             extra_fields["especialidade"] = self.cleaned_data[
                 "especialidade"
             ].strip()
+            extra_fields["modalidade"] = self.cleaned_data["modalidade"]
         return tipo_usuario.objects.create_user(
             email=self.cleaned_data["email"],
             password=self.cleaned_data["senha"],
@@ -277,9 +292,45 @@ class ProfissionalListView(ListView):
     template_name = "agendamento/profissional_list.html"
 
     def get_queryset(self):
-        return Profissional.objects.filter(is_active=True).prefetch_related(
+        queryset = Profissional.objects.filter(is_active=True).prefetch_related(
             "servicos"
         )
+        especialidade = self.request.GET.get("especialidade", "").strip()
+        servico = self.request.GET.get("servico", "").strip()
+        modalidade = self.request.GET.get("modalidade", "").strip()
+
+        if especialidade:
+            queryset = queryset.filter(especialidade__iexact=especialidade)
+        if servico:
+            queryset = queryset.filter(
+                servicos__nome__iexact=servico
+            ).distinct()
+        if modalidade:
+            queryset = queryset.filter(modalidade=modalidade)
+
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        profissionais_ativos = Profissional.objects.filter(is_active=True)
+        context["especialidades"] = (
+            profissionais_ativos.order_by("especialidade")
+            .values_list("especialidade", flat=True)
+            .distinct()
+        )
+        context["servicos_disponiveis"] = (
+            Servico.objects.filter(profissional__is_active=True)
+            .order_by("nome")
+            .values_list("nome", flat=True)
+            .distinct()
+        )
+        context["modalidades"] = Profissional.Modalidade.choices
+        context["filtros"] = {
+            "especialidade": self.request.GET.get("especialidade", "").strip(),
+            "servico": self.request.GET.get("servico", "").strip(),
+            "modalidade": self.request.GET.get("modalidade", "").strip(),
+        }
+        return context
 
 
 class ProfissionalDetailView(DetailView):

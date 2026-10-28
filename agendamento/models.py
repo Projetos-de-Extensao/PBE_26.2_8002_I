@@ -125,7 +125,17 @@ class Cliente(Usuario):
 
 
 class Profissional(Usuario):
+    class Modalidade(models.TextChoices):
+        PRESENCIAL = "presencial", "Presencial"
+        ONLINE = "online", "Online"
+        HIBRIDO = "hibrido", "Híbrido"
+
     especialidade = models.CharField(max_length=150)
+    modalidade = models.CharField(
+        max_length=20,
+        choices=Modalidade.choices,
+        default=Modalidade.PRESENCIAL,
+    )
     formacao = models.TextField(blank=True)
     apresentacao = models.TextField(blank=True)
 
