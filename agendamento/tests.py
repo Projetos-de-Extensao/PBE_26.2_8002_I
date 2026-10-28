@@ -686,6 +686,18 @@ class PerfilProfissionalTests(TestCase):
             response,
             reverse("novo_agendamento", args=[self.servico.pk]),
         )
+        self.assertContains(response, "Agendar este serviço")
+
+    def test_botao_do_perfil_abre_agendamento_do_servico(self):
+        response = self.client.get(
+            reverse("profissional_detail", args=[self.profissional.pk])
+        )
+
+        self.assertContains(
+            response,
+            f'href="{reverse("novo_agendamento", args=[self.servico.pk])}"',
+        )
+        self.assertContains(response, "Agendar este serviço")
 
     def test_perfil_omite_horarios_ocupados_e_bloqueados(self):
         papel_cliente = Papel.objects.create(nome="Cliente")
