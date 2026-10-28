@@ -1,0 +1,9 @@
+{% extends "agendamento/base.html" %}
+{% block title %}Acesso negado{% endblock %}
+{% block content %}
+  <h1>Acesso negado</h1>
+  <p>Seu perfil não tem permissão para realizar esta ação.</p>
+  <nav class="options" aria-label="Navegação">
+    <a href="{% url 'login' %}">Voltar</a>
+  </nav>
+{% endblock %}

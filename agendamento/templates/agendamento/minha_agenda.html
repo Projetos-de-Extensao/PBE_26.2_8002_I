@@ -1,0 +1,33 @@
+{% extends "agendamento/base.html" %}
+{% block title %}Minha agenda{% endblock %}
+{% block main_class %}wide{% endblock %}
+{% block content %}
+  <h1>Minha agenda</h1>
+  {% if agendamentos %}
+    <div class="cards">
+      {% for agendamento in agendamentos %}
+        <article class="card">
+          <h2>{{ agendamento.servico.nome }}</h2>
+          <p>Profissional: {{ agendamento.profissional.nome }}</p>
+          <p>
+            {{ agendamento.data_hora_inicio|date:"d/m/Y" }}
+            às {{ agendamento.data_hora_inicio|date:"H:i" }}
+          </p>
+          <p>Status: {{ agendamento.get_status_display }}</p>
+          {% if agendamento.status != "cancelado" and agendamento.status != "concluido" and agendamento.data_hora_inicio > now %}
+            <form method="post" action="{% url 'cancelar_agendamento' agendamento.pk %}">
+              {% csrf_token %}
+              <button type="submit">Cancelar agendamento</button>
+            </form>
+          {% endif %}
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p>Você ainda não tem agendamentos.</p>
+  {% endif %}
+  <nav class="options" aria-label="Navegação da agenda">
+    <a href="{% url 'profissionais' %}">Buscar profissionais</a>
+    <a href="{% url 'login' %}">Voltar</a>
+  </nav>
+{% endblock %}
