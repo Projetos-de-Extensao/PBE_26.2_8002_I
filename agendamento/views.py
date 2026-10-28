@@ -8,10 +8,12 @@ from django.contrib.auth.views import LoginView as DjangoLoginView
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.shortcuts import get_object_or_404
-from django.urls import reverse_lazy
+from django.http import HttpResponseRedirect
+from django.shortcuts import get_object_or_404, render
+from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
+from django.views import View
 from django.views.generic import DetailView, FormView, ListView
 
 from agendamento.models import (
@@ -25,6 +27,32 @@ from agendamento.models import (
     Servico,
     Usuario,
 )
+
+
+def _acesso_negado(request):
+    return render(request, "agendamento/acesso_negado.html", status=403)
+
+
+def _cliente_para_usuario(usuario):
+    cliente = Cliente.objects.filter(pk=usuario.pk).first()
+    if cliente is not None:
+        return cliente
+
+    cliente = Cliente(
+        usuario_ptr=usuario,
+        password=usuario.password,
+        last_login=usuario.last_login,
+        is_superuser=usuario.is_superuser,
+        first_name=usuario.first_name,
+        last_name=usuario.last_name,
+        is_staff=usuario.is_staff,
+        is_active=usuario.is_active,
+        date_joined=usuario.date_joined,
+        email=usuario.email,
+        nome=usuario.nome,
+    )
+    cliente.save()
+    return cliente
 
 
 def _proximos_horarios(profissional, servico, quantidade=5):
@@ -327,29 +355,12 @@ class NovoAgendamentoView(LoginRequiredMixin, FormView):
 
     def form_valid(self, form):
         inicio = datetime.fromisoformat(form.cleaned_data["horario"])
-        cliente = Cliente.objects.filter(pk=self.request.user.pk).first()
-        if cliente is None:
-            if self.request.user.perfil.papel != Perfil.Papel.CLIENTE:
-                form.add_error(
-                    None,
-                    _("Somente contas de cliente podem fazer agendamentos."),
-                )
-                return self.form_invalid(form)
-            usuario = self.request.user
-            cliente = Cliente(
-                usuario_ptr=usuario,
-                password=usuario.password,
-                last_login=usuario.last_login,
-                is_superuser=usuario.is_superuser,
-                first_name=usuario.first_name,
-                last_name=usuario.last_name,
-                is_staff=usuario.is_staff,
-                is_active=usuario.is_active,
-                date_joined=usuario.date_joined,
-                email=usuario.email,
-                nome=usuario.nome,
-            )
-            cliente.save()
+        if not Perfil.objects.filter(
+            usuario_id=self.request.user.pk,
+            papel=Perfil.Papel.CLIENTE,
+        ).exists():
+            return _acesso_negado(self.request)
+        cliente = _cliente_para_usuario(self.request.user)
 
         with transaction.atomic():
             profissional = Profissional.objects.select_for_update().get(
@@ -384,3 +395,59 @@ class NovoAgendamentoView(LoginRequiredMixin, FormView):
 
         messages.success(self.request, _("Agendamento confirmado com sucesso."))
         return super().form_valid(form)
+
+
+class ClienteRoleRequiredMixin(LoginRequiredMixin):
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return self.handle_no_permission()
+        if not Perfil.objects.filter(
+            usuario_id=request.user.pk,
+            papel=Perfil.Papel.CLIENTE,
+        ).exists():
+            return _acesso_negado(request)
+        self.cliente = _cliente_para_usuario(request.user)
+        return super().dispatch(request, *args, **kwargs)
+
+
+class AgendaClienteView(ClienteRoleRequiredMixin, ListView):
+    model = Agendamento
+    context_object_name = "agendamentos"
+    template_name = "agendamento/minha_agenda.html"
+
+    def get_queryset(self):
+        return (
+            Agendamento.objects.filter(cliente=self.cliente)
+            .select_related("servico", "profissional", "sala")
+            .order_by("data_hora_inicio")
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["now"] = timezone.now()
+        return context
+
+
+class CancelarAgendamentoView(ClienteRoleRequiredMixin, View):
+    http_method_names = ["post"]
+
+    def post(self, request, *args, **kwargs):
+        agendamento = get_object_or_404(
+            Agendamento,
+            pk=kwargs["pk"],
+            cliente=self.cliente,
+        )
+        if (
+            agendamento.status
+            in (Agendamento.Status.CANCELADO, Agendamento.Status.CONCLUIDO)
+            or agendamento.data_hora_inicio <= timezone.now()
+        ):
+            messages.error(
+                request,
+                _("Este agendamento não pode mais ser cancelado."),
+            )
+        else:
+            agendamento.status = Agendamento.Status.CANCELADO
+            agendamento.save(update_fields=["status"])
+            messages.success(request, _("Agendamento cancelado."))
+        return HttpResponseRedirect(reverse("minha_agenda"))
