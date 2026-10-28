@@ -1,5 +1,5 @@
 {% extends "agendamento/base.html" %}
-{% block title %}Cadastrar{% endblock %}
+{% block title %}Cadastro de usuário{% endblock %}
 {% block content %}
   <h1>Criar conta</h1>
   <form method="post">
@@ -8,7 +8,7 @@
       <div class="error" role="alert">{{ form.non_field_errors }}</div>
     {% endif %}
     {% for field in form %}
-      <div class="field">
+      <div class="field"{% if field.name == "especialidade" %} id="especialidade-field"{% if form.data.papel != "profissional" %} hidden{% endif %}{% endif %}>
         <label for="{{ field.id_for_label }}">{{ field.label }}</label>
         {{ field }}
         {% if field.errors %}
@@ -18,7 +18,20 @@
     {% endfor %}
     <button type="submit">Criar conta</button>
   </form>
-  <nav class="options" aria-label="Navegação da conta">
+  <nav class="options" aria-label="Navegação do cadastro">
     <a href="{% url 'login' %}">Voltar ao login</a>
   </nav>
+  <script>
+    const papel = document.getElementById("id_papel");
+    const especialidade = document.getElementById("especialidade-field");
+
+    function atualizarEspecialidade() {
+      const profissional = papel.value === "profissional";
+      especialidade.hidden = !profissional;
+      document.getElementById("id_especialidade").required = profissional;
+    }
+
+    papel.addEventListener("change", atualizarEspecialidade);
+    atualizarEspecialidade();
+  </script>
 {% endblock %}
