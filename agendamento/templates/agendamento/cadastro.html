@@ -8,7 +8,7 @@
       <div class="error" role="alert">{{ form.non_field_errors }}</div>
     {% endif %}
     {% for field in form %}
-      <div class="field"{% if field.name == "especialidade" %} id="especialidade-field"{% if form.data.papel != "profissional" %} hidden{% endif %}{% endif %}>
+      <div class="field"{% if field.name == "especialidade" or field.name == "modalidade" %} id="{{ field.name }}-field"{% if form.data.papel != "profissional" %} hidden{% endif %}{% endif %}>
         <label for="{{ field.id_for_label }}">{{ field.label }}</label>
         {{ field }}
         {% if field.errors %}
@@ -24,11 +24,14 @@
   <script>
     const papel = document.getElementById("id_papel");
     const especialidade = document.getElementById("especialidade-field");
+    const modalidade = document.getElementById("modalidade-field");
 
     function atualizarEspecialidade() {
       const profissional = papel.value === "profissional";
       especialidade.hidden = !profissional;
+      modalidade.hidden = !profissional;
       document.getElementById("id_especialidade").required = profissional;
+      document.getElementById("id_modalidade").required = profissional;
     }
 
     papel.addEventListener("change", atualizarEspecialidade);

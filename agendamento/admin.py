@@ -92,6 +92,7 @@ class ProfissionalCreationForm(forms.ModelForm):
             "email",
             "nome",
             "especialidade",
+            "modalidade",
             "formacao",
             "apresentacao",
         )
@@ -117,6 +118,7 @@ class ProfissionalChangeForm(forms.ModelForm):
             "email",
             "nome",
             "especialidade",
+            "modalidade",
             "formacao",
             "apresentacao",
             "is_active",
@@ -127,8 +129,8 @@ class ProfissionalChangeForm(forms.ModelForm):
 class ProfissionalAdmin(admin.ModelAdmin):
     form = ProfissionalChangeForm
     add_form = ProfissionalCreationForm
-    list_display = ("nome", "email", "especialidade", "is_active")
-    list_filter = ("is_active", "especialidade")
+    list_display = ("nome", "email", "especialidade", "modalidade", "is_active")
+    list_filter = ("is_active", "especialidade", "modalidade")
     search_fields = ("nome", "email", "especialidade")
 
     def get_form(self, request, obj=None, **kwargs):

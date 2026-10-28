@@ -1,26 +1,76 @@
 {% extends "agendamento/base.html" %}
-{% block title %}Profissionais{% endblock %}
+{% block title %}Buscar profissionais{% endblock %}
 {% block main_class %}wide{% endblock %}
 {% block content %}
-  <h1>Profissionais</h1>
-  {% if profissionais %}
-    <div class="cards">
-      {% for profissional in profissionais %}
-        <article class="card">
-          <h2>{{ profissional.nome }}</h2>
-          <p>{{ profissional.especialidade }}</p>
-          {% if profissional.apresentacao %}
-            <p class="muted">{{ profissional.apresentacao|truncatewords:24 }}</p>
-          {% endif %}
-          <a class="text-link" href="{% url 'profissional_detail' profissional.pk %}">
-            Ver perfil e horários
-          </a>
-        </article>
-      {% endfor %}
+  <h1>Buscar profissionais</h1>
+  <form method="get" action="{% url 'profissionais' %}" aria-label="Filtros de busca">
+    <div class="filters-grid">
+      <div class="field">
+        <label for="id_especialidade">Especialidade</label>
+        <select id="id_especialidade" name="especialidade">
+          <option value="">Todas</option>
+          {% for especialidade in especialidades %}
+            <option value="{{ especialidade }}"{% if filtros.especialidade == especialidade %} selected{% endif %}>
+              {{ especialidade }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="id_servico">Serviço</label>
+        <select id="id_servico" name="servico">
+          <option value="">Todos</option>
+          {% for servico in servicos_disponiveis %}
+            <option value="{{ servico }}"{% if filtros.servico == servico %} selected{% endif %}>
+              {{ servico }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="id_modalidade">Modalidade</label>
+        <select id="id_modalidade" name="modalidade">
+          <option value="">Todas</option>
+          {% for valor, rotulo in modalidades %}
+            <option value="{{ valor }}"{% if filtros.modalidade == valor %} selected{% endif %}>
+              {{ rotulo }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
     </div>
-  {% else %}
-    <p>Nenhum profissional disponível no momento.</p>
-  {% endif %}
+    <button type="submit">Buscar</button>
+  </form>
+
+  <section aria-labelledby="resultados-heading">
+    <h2 id="resultados-heading">Resultados</h2>
+    {% if profissionais %}
+      <div class="cards">
+        {% for profissional in profissionais %}
+          <article class="card">
+            <h2>{{ profissional.nome }}</h2>
+            <p>{{ profissional.especialidade }} · {{ profissional.get_modalidade_display }}</p>
+            {% if profissional.apresentacao %}
+              <p class="muted">{{ profissional.apresentacao|truncatewords:24 }}</p>
+            {% endif %}
+            {% if profissional.servicos.all %}
+              <p><strong>Serviços:</strong>
+                {% for servico in profissional.servicos.all %}
+                  {% if not forloop.first %}, {% endif %}{{ servico.nome }}
+                {% endfor %}
+              </p>
+            {% endif %}
+            <a class="text-link" href="{% url 'profissional_detail' profissional.pk %}">
+              Ver perfil
+            </a>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p>Nenhum profissional encontrado com esses filtros.</p>
+    {% endif %}
+  </section>
+
   <nav class="options" aria-label="Navegação da conta">
     <a href="{% url 'login' %}">Voltar</a>
   </nav>
