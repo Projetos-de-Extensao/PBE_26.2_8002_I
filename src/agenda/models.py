@@ -93,11 +93,44 @@ class Profissional(models.Model):
         return f"{self.usuario} - {self.get_especialidade_display()}"
 
 
+class Servico(models.Model):
+    """Atendimento oferecido por um profissional, com duração definida.
+
+    RF05. RN07: a duração é o que define o horário de término do agendamento.
+    """
+
+    MODALIDADES = Profissional.MODALIDADES
+
+    profissional = models.ForeignKey(
+        Profissional,
+        on_delete=models.CASCADE,
+        related_name="servicos",
+    )
+    nome = models.CharField("nome", max_length=100)
+    duracao_minutos = models.PositiveIntegerField(
+        "duração (minutos)", validators=[MinValueValidator(1)]
+    )
+    modalidade = models.CharField(
+        "modalidade", max_length=20, choices=MODALIDADES, default="PRESENCIAL"
+    )
+    ativo = models.BooleanField("ativo", default=True)
+
+    class Meta:
+        verbose_name = "serviço"
+        verbose_name_plural = "serviços"
+        ordering = ["profissional", "nome"]
+        unique_together = [("profissional", "nome")]
+
+    def __str__(self):
+        return f"{self.nome} ({self.duracao_minutos} min)"
+
+
 class Agendamento(models.Model):
     """Reserva de um atendimento entre um cliente e um profissional.
 
     RF10, RF13, RF14, RF15. RN01 (conflito do profissional), RN02 (conflito
-    do cliente); agendamentos cancelados não bloqueiam horários.
+    do cliente), RN03 (conflito de sala), RN04 (conflito de recurso
+    exclusivo); agendamentos cancelados não bloqueiam horários.
     """
 
     STATUS = [
@@ -117,7 +150,27 @@ class Agendamento(models.Model):
         on_delete=models.CASCADE,
         related_name="agendamentos",
     )
-    servico = models.CharField("serviço", max_length=100)
+    servico = models.ForeignKey(
+        Servico,
+        on_delete=models.PROTECT,
+        related_name="agendamentos",
+        null=True,
+        blank=True,
+    )
+    sala = models.ForeignKey(
+        Sala,
+        on_delete=models.PROTECT,
+        related_name="agendamentos",
+        null=True,
+        blank=True,
+    )
+    recurso = models.ForeignKey(
+        Recurso,
+        on_delete=models.PROTECT,
+        related_name="agendamentos",
+        null=True,
+        blank=True,
+    )
     data = models.DateField("data")
     hora_inicio = models.TimeField("hora de início")
     hora_fim = models.TimeField("hora de término")
@@ -168,6 +221,19 @@ class Agendamento(models.Model):
             cliente_id=self.cliente_id
         ).exists():
             raise ValidationError("O cliente já possui um agendamento neste horário.")
+        if self.sala_id and conflitantes.filter(sala_id=self.sala_id).exists():
+            raise ValidationError(
+                {"sala": "A sala já está reservada neste horário."}
+            )
+        # Recurso compartilhado pode ser usado por mais de um atendimento.
+        if (
+            self.recurso_id
+            and self.recurso.exclusivo
+            and conflitantes.filter(recurso_id=self.recurso_id).exists()
+        ):
+            raise ValidationError(
+                {"recurso": "O recurso já está reservado neste horário."}
+            )
 
     def save(self, *args, **kwargs):
         # Garante as validações críticas no back-end, fora de formulários.
