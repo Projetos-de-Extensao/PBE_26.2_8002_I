@@ -5,7 +5,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 
-from .models import Agendamento, Profissional, Recurso, Sala
+from .models import Agendamento, Profissional, Recurso, Sala, Servico
 
 
 class SalaTests(TestCase):
@@ -49,12 +49,19 @@ class AgendamentoTests(TestCase):
             usuario=User.objects.create_user("prof2", password="x"),
             especialidade="PERSONAL",
         )
+        self.servico = Servico.objects.create(
+            profissional=self.prof, nome="Consulta", duracao_minutos=60
+        )
+        self.sala = Sala.objects.create(nome="Sala 1")
+        self.sala2 = Sala.objects.create(nome="Sala 2")
+        self.maca = Recurso.objects.create(nome="Maca")
+        self.colchonete = Recurso.objects.create(nome="Colchonete", exclusivo=False)
 
     def criar(self, cliente=None, profissional=None, inicio=time(9), fim=time(10), **kw):
         return Agendamento.objects.create(
             cliente=cliente or self.cliente,
             profissional=profissional or self.prof,
-            servico="Consulta",
+            servico=kw.pop("servico", self.servico),
             data=date(2026, 11, 3),
             hora_inicio=inicio,
             hora_fim=fim,
@@ -65,6 +72,62 @@ class AgendamentoTests(TestCase):
         self.assertEqual(str(self.prof), "prof1 - Nutricionista")
         self.assertTrue(self.prof.ativo)
         self.assertEqual(self.prof.modalidade, "PRESENCIAL")
+
+    def test_servico_str_e_duracao(self):
+        self.assertEqual(str(self.servico), "Consulta (60 min)")
+        self.assertTrue(self.servico.ativo)
+
+    def test_servico_duracao_minima(self):
+        with self.assertRaises(ValidationError):
+            Servico(
+                profissional=self.prof, nome="Rápido", duracao_minutos=0
+            ).full_clean()
+
+    def test_conflito_de_sala(self):
+        self.criar(sala=self.sala)
+        with self.assertRaises(ValidationError):
+            self.criar(
+                cliente=self.cliente2,
+                profissional=self.prof2,
+                inicio=time(9, 30),
+                fim=time(10, 30),
+                sala=self.sala,
+            )
+
+    def test_salas_diferentes_nao_conflitam(self):
+        self.criar(sala=self.sala)
+        self.criar(
+            cliente=self.cliente2,
+            profissional=self.prof2,
+            inicio=time(9, 30),
+            fim=time(10, 30),
+            sala=self.sala2,
+        )
+
+    def test_conflito_de_recurso_exclusivo(self):
+        self.criar(recurso=self.maca)
+        with self.assertRaises(ValidationError):
+            self.criar(
+                cliente=self.cliente2,
+                profissional=self.prof2,
+                inicio=time(9, 30),
+                fim=time(10, 30),
+                recurso=self.maca,
+            )
+
+    def test_recurso_compartilhado_nao_conflita(self):
+        self.criar(recurso=self.colchonete)
+        self.criar(
+            cliente=self.cliente2,
+            profissional=self.prof2,
+            inicio=time(9, 30),
+            fim=time(10, 30),
+            recurso=self.colchonete,
+        )
+
+    def test_sala_livre_apos_cancelamento(self):
+        self.criar(sala=self.sala, status="CANCELADO")
+        self.criar(sala=self.sala)
 
     def test_criacao_e_str(self):
         ag = self.criar()
