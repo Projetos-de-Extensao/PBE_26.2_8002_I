@@ -83,6 +83,7 @@ class CadastroViewTests(TestCase):
         self.assertContains(response, 'value="cliente"')
         self.assertContains(response, 'value="profissional"')
         self.assertContains(response, 'value="recepcionista"')
+        self.assertContains(response, "Modalidade de atendimento")
         self.assertNotContains(response, 'value="administrador"')
 
     def test_cadastra_cliente_com_senha_valida(self):
@@ -151,6 +152,7 @@ class CadastroViewTests(TestCase):
                 "email": "profissional@exemplo.com",
                 "papel": Perfil.Papel.PROFISSIONAL,
                 "especialidade": "Fisioterapia",
+                "modalidade": Profissional.Modalidade.ONLINE,
                 "senha": "Nuvem#Roxa39!Chuva",
                 "confirmar_senha": "Nuvem#Roxa39!Chuva",
             },
@@ -165,7 +167,24 @@ class CadastroViewTests(TestCase):
             Perfil.Papel.PROFISSIONAL,
         )
         self.assertEqual(profissional.especialidade, "Fisioterapia")
+        self.assertEqual(profissional.modalidade, Profissional.Modalidade.ONLINE)
         self.assertContains(response, "Conta criada com sucesso")
+
+    def test_exige_modalidade_para_profissional(self):
+        response = self.client.post(
+            reverse("cadastro"),
+            {
+                "nome": "Nova Profissional",
+                "email": "profissional@exemplo.com",
+                "papel": Perfil.Papel.PROFISSIONAL,
+                "especialidade": "Fisioterapia",
+                "senha": "Nuvem#Roxa39!Chuva",
+                "confirmar_senha": "Nuvem#Roxa39!Chuva",
+            },
+        )
+
+        self.assertContains(response, "Informe a modalidade de atendimento.")
+        self.assertFalse(Profissional.objects.exists())
 
     def test_cadastra_recepcionista(self):
         response = self.client.post(
@@ -413,6 +432,7 @@ class ControleAcessoTests(TestCase):
                 "email": "novo-profissional@exemplo.com",
                 "nome": "Novo profissional",
                 "especialidade": "Nutrição",
+                "modalidade": Profissional.Modalidade.ONLINE,
                 "formacao": "Nutrição clínica",
                 "apresentacao": "Atendimento nutricional.",
                 "password1": "Senha#Segura984",
@@ -578,10 +598,72 @@ class PerfilProfissionalTests(TestCase):
         response = self.client.get(reverse("profissionais"))
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Buscar profissionais")
+        self.assertContains(response, "Especialidade")
+        self.assertContains(response, "Serviço")
+        self.assertContains(response, "Modalidade")
         self.assertContains(response, self.profissional.nome)
         self.assertContains(
             response,
             reverse("profissional_detail", args=[self.profissional.pk]),
+        )
+
+    def test_filtros_de_especialidade_servico_e_modalidade(self):
+        outro_profissional = Profissional.objects.create_user(
+            email="nutricionista@exemplo.com",
+            password="senha-segura-123",
+            nome="Carla Nunes",
+            papel=Perfil.Papel.PROFISSIONAL,
+            especialidade="Nutricionista",
+            modalidade=Profissional.Modalidade.ONLINE,
+        )
+        Servico.objects.create(
+            profissional=outro_profissional,
+            nome="Consulta Nutricional",
+            tipo="Consulta",
+            duracao_minutos=45,
+        )
+
+        response = self.client.get(
+            reverse("profissionais"),
+            {
+                "especialidade": "Nutricionista",
+                "servico": "Consulta Nutricional",
+                "modalidade": Profissional.Modalidade.ONLINE,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertQuerySetEqual(
+            response.context["profissionais"],
+            [outro_profissional],
+        )
+        self.assertContains(response, "Carla Nunes")
+        self.assertContains(response, "Consulta Nutricional")
+        self.assertContains(
+            response,
+            reverse("profissional_detail", args=[outro_profissional.pk]),
+        )
+        self.assertNotContains(response, "Ana Silva")
+
+    def test_filtro_de_servico_nao_duplica_profissionais(self):
+        outro_servico = Servico.objects.create(
+            profissional=self.profissional,
+            nome="Acompanhamento",
+            tipo="Treinamento",
+            duracao_minutos=30,
+        )
+
+        response = self.client.get(
+            reverse("profissionais"),
+            {"servico": outro_servico.nome},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context["profissionais"]), 1)
+        self.assertEqual(
+            response.context["profissionais"][0],
+            self.profissional,
         )
 
     def test_perfil_exibe_dados_servicos_e_proximos_horarios(self):
