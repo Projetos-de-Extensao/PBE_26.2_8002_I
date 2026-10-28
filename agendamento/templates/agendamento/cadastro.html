@@ -1,0 +1,24 @@
+{% extends "agendamento/base.html" %}
+{% block title %}Cadastrar{% endblock %}
+{% block content %}
+  <h1>Criar conta</h1>
+  <form method="post">
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+      <div class="error" role="alert">{{ form.non_field_errors }}</div>
+    {% endif %}
+    {% for field in form %}
+      <div class="field">
+        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+        {% if field.errors %}
+          <div class="error" role="alert">{{ field.errors }}</div>
+        {% endif %}
+      </div>
+    {% endfor %}
+    <button type="submit">Criar conta</button>
+  </form>
+  <nav class="options" aria-label="Navegação da conta">
+    <a href="{% url 'login' %}">Voltar ao login</a>
+  </nav>
+{% endblock %}
