@@ -25,12 +25,33 @@ from django.contrib.auth.views import (
 )
 from django.urls import path, reverse_lazy
 
-from agendamento.views import CadastroView, LoginView
+from agendamento.views import (
+    CadastroView,
+    LoginView,
+    NovoAgendamentoView,
+    ProfissionalDetailView,
+    ProfissionalListView,
+)
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("", LoginView.as_view(), name="login"),
     path("cadastrar/", CadastroView.as_view(), name="cadastro"),
+    path(
+        "profissionais/",
+        ProfissionalListView.as_view(),
+        name="profissionais",
+    ),
+    path(
+        "profissionais/<int:pk>/",
+        ProfissionalDetailView.as_view(),
+        name="profissional_detail",
+    ),
+    path(
+        "agendar/<int:servico_id>/",
+        NovoAgendamentoView.as_view(),
+        name="novo_agendamento",
+    ),
     path(
         "senha/redefinir/",
         PasswordResetView.as_view(

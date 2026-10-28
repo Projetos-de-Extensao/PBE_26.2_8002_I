@@ -1,15 +1,122 @@
+from datetime import datetime, time, timedelta
+
 from django import forms
 from django.contrib import messages
 from django.contrib.auth.forms import AuthenticationForm
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView as DjangoLoginView
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.shortcuts import get_object_or_404
 from django.urls import reverse_lazy
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
-from django.views.generic import FormView
+from django.views.generic import DetailView, FormView, ListView
 
-from agendamento.models import Papel, Usuario
+from agendamento.models import (
+    Agendamento,
+    Bloqueio,
+    Cliente,
+    Disponibilidade,
+    Perfil,
+    Profissional,
+    Recepcionista,
+    Servico,
+    Usuario,
+)
+
+
+def _proximos_horarios(profissional, servico, quantidade=5):
+    agora = timezone.localtime()
+    hoje = timezone.localdate()
+    ultimo_dia = hoje + timedelta(days=30)
+    disponibilidades = list(
+        profissional.disponibilidades.all()
+    )
+    agendamentos = list(
+        Agendamento.objects.filter(
+            profissional=profissional,
+            data_hora_inicio__lt=timezone.make_aware(
+                datetime.combine(ultimo_dia + timedelta(days=1), time.min)
+            ),
+            data_hora_fim__gt=agora,
+        )
+        .exclude(status=Agendamento.Status.CANCELADO)
+        .only("data_hora_inicio", "data_hora_fim")
+    )
+    bloqueios = list(
+        Bloqueio.objects.filter(
+            profissional=profissional,
+            inicio__lt=timezone.make_aware(
+                datetime.combine(ultimo_dia + timedelta(days=1), time.min)
+            ),
+            fim__gt=agora,
+        ).only("inicio", "fim")
+    )
+    duracao = timedelta(minutes=servico.duracao_minutos)
+    horarios = []
+
+    for dias_a_frente in range(31):
+        data = hoje + timedelta(days=dias_a_frente)
+        for disponibilidade in disponibilidades:
+            if disponibilidade.dia_semana != data.weekday():
+                continue
+
+            inicio = timezone.make_aware(
+                datetime.combine(data, disponibilidade.hora_inicio)
+            )
+            fim_disponivel = timezone.make_aware(
+                datetime.combine(data, disponibilidade.hora_fim)
+            )
+            while inicio + duracao <= fim_disponivel and len(horarios) < quantidade:
+                fim = inicio + duracao
+                ocupado = any(
+                    agendamento.data_hora_inicio < fim
+                    and agendamento.data_hora_fim > inicio
+                    for agendamento in agendamentos
+                ) or any(
+                    bloqueio.inicio < fim and bloqueio.fim > inicio
+                    for bloqueio in bloqueios
+                )
+                if inicio >= agora and not ocupado:
+                    horarios.append(inicio)
+                inicio += timedelta(minutes=30)
+
+            if len(horarios) >= quantidade:
+                break
+        if len(horarios) >= quantidade:
+            break
+
+    return horarios
+
+
+def _horario_disponivel(profissional, servico, inicio):
+    agora = timezone.now()
+    fim = inicio + timedelta(minutes=servico.duracao_minutos)
+    dentro_da_disponibilidade = profissional.disponibilidades.filter(
+        dia_semana=inicio.weekday(),
+        hora_inicio__lte=inicio.time(),
+        hora_fim__gte=fim.time(),
+    ).exists()
+    if inicio < agora or not dentro_da_disponibilidade:
+        return False
+
+    agendado = (
+        Agendamento.objects.filter(
+            profissional=profissional,
+            data_hora_inicio__lt=fim,
+            data_hora_fim__gt=inicio,
+        )
+        .exclude(status=Agendamento.Status.CANCELADO)
+        .exists()
+    )
+    bloqueado = Bloqueio.objects.filter(
+        profissional=profissional,
+        inicio__lt=fim,
+        fim__gt=inicio,
+    ).exists()
+    return not agendado and not bloqueado
 
 
 class EmailAuthenticationForm(AuthenticationForm):
@@ -38,10 +145,25 @@ class LoginView(DjangoLoginView):
 
 
 class CadastroForm(forms.Form):
-    nome = forms.CharField(label=_("Nome"), max_length=150)
+    nome = forms.CharField(label=_("Nome completo"), max_length=150)
     email = forms.EmailField(
         label=_("E-mail"),
         widget=forms.EmailInput(attrs={"autocomplete": "email"}),
+    )
+    papel = forms.ChoiceField(
+        label=_("Tipo de usuário"),
+        choices=(
+            (Perfil.Papel.CLIENTE, _("Cliente")),
+            (Perfil.Papel.PROFISSIONAL, _("Profissional")),
+            (Perfil.Papel.RECEPCIONISTA, _("Recepcionista")),
+        ),
+        initial=Perfil.Papel.CLIENTE,
+    )
+    especialidade = forms.CharField(
+        label=_("Especialidade"),
+        max_length=150,
+        required=False,
+        widget=forms.TextInput(attrs={"autocomplete": "organization-title"}),
     )
     senha = forms.CharField(
         label=_("Senha"),
@@ -62,6 +184,14 @@ class CadastroForm(forms.Form):
 
     def clean(self):
         cleaned_data = super().clean()
+        if (
+            cleaned_data.get("papel") == Perfil.Papel.PROFISSIONAL
+            and not cleaned_data.get("especialidade", "").strip()
+        ):
+            self.add_error(
+                "especialidade",
+                _("Informe sua especialidade profissional."),
+            )
         senha = cleaned_data.get("senha")
         confirmar_senha = cleaned_data.get("confirmar_senha")
         if senha and confirmar_senha and senha != confirmar_senha:
@@ -79,12 +209,23 @@ class CadastroForm(forms.Form):
 
     @transaction.atomic
     def save(self):
-        papel, _ = Papel.objects.get_or_create(nome="Cliente")
-        return Usuario.objects.create_user(
+        papel = self.cleaned_data["papel"]
+        tipo_usuario = {
+            Perfil.Papel.CLIENTE: Cliente,
+            Perfil.Papel.PROFISSIONAL: Profissional,
+            Perfil.Papel.RECEPCIONISTA: Recepcionista,
+        }[papel]
+        extra_fields = {}
+        if papel == Perfil.Papel.PROFISSIONAL:
+            extra_fields["especialidade"] = self.cleaned_data[
+                "especialidade"
+            ].strip()
+        return tipo_usuario.objects.create_user(
             email=self.cleaned_data["email"],
             password=self.cleaned_data["senha"],
             nome=self.cleaned_data["nome"],
             papel=papel,
+            **extra_fields,
         )
 
 
@@ -99,4 +240,147 @@ class CadastroView(FormView):
             self.request,
             _("Conta criada com sucesso. Entre com seu e-mail e senha."),
         )
+        return super().form_valid(form)
+
+
+class ProfissionalListView(ListView):
+    model = Profissional
+    context_object_name = "profissionais"
+    template_name = "agendamento/profissional_list.html"
+
+    def get_queryset(self):
+        return Profissional.objects.filter(is_active=True).prefetch_related(
+            "servicos"
+        )
+
+
+class ProfissionalDetailView(DetailView):
+    model = Profissional
+    context_object_name = "profissional"
+    template_name = "agendamento/profissional_detail.html"
+    queryset = Profissional.objects.filter(is_active=True).prefetch_related(
+        "servicos",
+        "disponibilidades",
+    )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        servicos = context["profissional"].servicos.all()
+        for servico in servicos:
+            servico.proximos_horarios = _proximos_horarios(
+                context["profissional"],
+                servico,
+            )
+        context["servicos"] = servicos
+        return context
+
+
+class AgendamentoForm(forms.Form):
+    horario = forms.ChoiceField(
+        label=_("Próximo horário disponível"),
+        choices=(),
+        error_messages={
+            "invalid_choice": _(
+                "Este horário não está mais disponível. Atualize e escolha outro."
+            ),
+        },
+        widget=forms.Select(attrs={"autocomplete": "off"}),
+    )
+
+    def __init__(self, *args, horarios, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["horario"].choices = [
+            (
+                horario.isoformat(),
+                timezone.localtime(horario).strftime("%d/%m/%Y às %H:%M"),
+            )
+            for horario in horarios
+        ]
+
+
+class NovoAgendamentoView(LoginRequiredMixin, FormView):
+    form_class = AgendamentoForm
+    template_name = "agendamento/novo_agendamento.html"
+    success_url = reverse_lazy("profissionais")
+
+    def dispatch(self, request, *args, **kwargs):
+        self.servico = get_object_or_404(
+            Servico.objects.select_related("profissional"),
+            pk=kwargs["servico_id"],
+            profissional__is_active=True,
+        )
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_horarios(self):
+        return _proximos_horarios(self.servico.profissional, self.servico)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["horarios"] = self.get_horarios()
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["servico"] = self.servico
+        context["profissional"] = self.servico.profissional
+        return context
+
+    def form_valid(self, form):
+        inicio = datetime.fromisoformat(form.cleaned_data["horario"])
+        cliente = Cliente.objects.filter(pk=self.request.user.pk).first()
+        if cliente is None:
+            if self.request.user.perfil.papel != Perfil.Papel.CLIENTE:
+                form.add_error(
+                    None,
+                    _("Somente contas de cliente podem fazer agendamentos."),
+                )
+                return self.form_invalid(form)
+            usuario = self.request.user
+            cliente = Cliente(
+                usuario_ptr=usuario,
+                password=usuario.password,
+                last_login=usuario.last_login,
+                is_superuser=usuario.is_superuser,
+                first_name=usuario.first_name,
+                last_name=usuario.last_name,
+                is_staff=usuario.is_staff,
+                is_active=usuario.is_active,
+                date_joined=usuario.date_joined,
+                email=usuario.email,
+                nome=usuario.nome,
+            )
+            cliente.save()
+
+        with transaction.atomic():
+            profissional = Profissional.objects.select_for_update().get(
+                pk=self.servico.profissional_id
+            )
+            servico = Servico.objects.get(
+                pk=self.servico.pk,
+                profissional=profissional,
+            )
+            if not _horario_disponivel(profissional, servico, inicio):
+                form.add_error(
+                    "horario",
+                    _("Este horário não está mais disponível. Escolha outro."),
+                )
+                return self.form_invalid(form)
+
+            agendamento = Agendamento(
+                cliente=cliente,
+                profissional=profissional,
+                servico=servico,
+                data_hora_inicio=inicio,
+                data_hora_fim=inicio
+                + timedelta(minutes=servico.duracao_minutos),
+            )
+            if agendamento.verificar_conflito():
+                form.add_error(
+                    "horario",
+                    _("Este horário não está mais disponível. Escolha outro."),
+                )
+                return self.form_invalid(form)
+            agendamento.save()
+
+        messages.success(self.request, _("Agendamento confirmado com sucesso."))
         return super().form_valid(form)
