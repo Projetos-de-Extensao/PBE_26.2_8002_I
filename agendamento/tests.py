@@ -1,10 +1,23 @@
+from datetime import datetime, time, timedelta
 import re
 
 from django.core import mail
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
-from agendamento.models import Papel, Usuario
+from agendamento.models import (
+    Agendamento,
+    Bloqueio,
+    Cliente,
+    Disponibilidade,
+    Papel,
+    Perfil,
+    Profissional,
+    Recepcionista,
+    Servico,
+    Usuario,
+)
 
 
 @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
@@ -60,12 +73,24 @@ class LoginViewTests(TestCase):
 
 @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
 class CadastroViewTests(TestCase):
+    def test_tela_de_cadastro_oferece_papeis_publicos(self):
+        response = self.client.get(reverse("cadastro"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Criar conta")
+        self.assertContains(response, "Nome completo")
+        self.assertContains(response, 'value="cliente"')
+        self.assertContains(response, 'value="profissional"')
+        self.assertContains(response, 'value="recepcionista"')
+        self.assertNotContains(response, 'value="administrador"')
+
     def test_cadastra_cliente_com_senha_valida(self):
         response = self.client.post(
             reverse("cadastro"),
             {
                 "nome": "Nova Cliente",
                 "email": "NOVA@EXEMPLO.COM",
+                "papel": Perfil.Papel.CLIENTE,
                 "senha": "Nuvem#Roxa39!Chuva",
                 "confirmar_senha": "Nuvem#Roxa39!Chuva",
             },
@@ -74,7 +99,8 @@ class CadastroViewTests(TestCase):
 
         usuario = Usuario.objects.get(email="nova@exemplo.com")
         self.assertEqual(usuario.nome, "Nova Cliente")
-        self.assertEqual(usuario.papel.nome, "Cliente")
+        self.assertEqual(usuario.perfil.papel, Perfil.Papel.CLIENTE)
+        self.assertTrue(Cliente.objects.filter(pk=usuario.pk).exists())
         self.assertTrue(usuario.check_password("Nuvem#Roxa39!Chuva"))
         self.assertContains(response, "Conta criada com sucesso")
 
@@ -92,6 +118,7 @@ class CadastroViewTests(TestCase):
             {
                 "nome": "Outra Cliente",
                 "email": "CLIENTE@EXEMPLO.COM",
+                "papel": Perfil.Papel.CLIENTE,
                 "senha": "Nuvem#Roxa39!Chuva",
                 "confirmar_senha": "Nuvem#Roxa39!Chuva",
             },
@@ -106,6 +133,7 @@ class CadastroViewTests(TestCase):
             {
                 "nome": "Nova Cliente",
                 "email": "nova@exemplo.com",
+                "papel": Perfil.Papel.CLIENTE,
                 "senha": "Nuvem#Roxa39!Chuva",
                 "confirmar_senha": "OutraSenha#123",
             },
@@ -113,6 +141,179 @@ class CadastroViewTests(TestCase):
 
         self.assertContains(response, "As senhas não coincidem.")
         self.assertFalse(Usuario.objects.exists())
+
+    def test_cadastra_profissional_com_especialidade(self):
+        response = self.client.post(
+            reverse("cadastro"),
+            {
+                "nome": "Nova Profissional",
+                "email": "profissional@exemplo.com",
+                "papel": Perfil.Papel.PROFISSIONAL,
+                "especialidade": "Fisioterapia",
+                "senha": "Nuvem#Roxa39!Chuva",
+                "confirmar_senha": "Nuvem#Roxa39!Chuva",
+            },
+            follow=True,
+        )
+
+        profissional = Profissional.objects.get(
+            email="profissional@exemplo.com"
+        )
+        self.assertEqual(
+            profissional.perfil.papel,
+            Perfil.Papel.PROFISSIONAL,
+        )
+        self.assertEqual(profissional.especialidade, "Fisioterapia")
+        self.assertContains(response, "Conta criada com sucesso")
+
+    def test_cadastra_recepcionista(self):
+        response = self.client.post(
+            reverse("cadastro"),
+            {
+                "nome": "Nova Recepcionista",
+                "email": "recepcionista@exemplo.com",
+                "papel": Perfil.Papel.RECEPCIONISTA,
+                "senha": "Nuvem#Roxa39!Chuva",
+                "confirmar_senha": "Nuvem#Roxa39!Chuva",
+            },
+            follow=True,
+        )
+
+        recepcionista = Recepcionista.objects.get(
+            email="recepcionista@exemplo.com"
+        )
+        self.assertEqual(
+            recepcionista.perfil.papel,
+            Perfil.Papel.RECEPCIONISTA,
+        )
+        self.assertContains(response, "Conta criada com sucesso")
+
+    def test_exige_especialidade_para_profissional(self):
+        response = self.client.post(
+            reverse("cadastro"),
+            {
+                "nome": "Nova Profissional",
+                "email": "profissional@exemplo.com",
+                "papel": Perfil.Papel.PROFISSIONAL,
+                "senha": "Nuvem#Roxa39!Chuva",
+                "confirmar_senha": "Nuvem#Roxa39!Chuva",
+            },
+        )
+
+        self.assertContains(response, "Informe sua especialidade")
+        self.assertFalse(Usuario.objects.exists())
+
+
+class PerfilModelTests(TestCase):
+    def test_todo_tipo_de_usuario_recebe_perfil_com_papel_correto(self):
+        usuarios = [
+            (
+                Usuario,
+                "usuario@exemplo.com",
+                Perfil.Papel.CLIENTE,
+                {},
+            ),
+            (
+                Cliente,
+                "cliente@exemplo.com",
+                Perfil.Papel.CLIENTE,
+                {},
+            ),
+            (
+                Profissional,
+                "profissional@exemplo.com",
+                Perfil.Papel.PROFISSIONAL,
+                {"especialidade": "Fisioterapia"},
+            ),
+        ]
+
+        for model, email, papel, extra_fields in usuarios:
+            with self.subTest(model=model.__name__):
+                usuario = model.objects.create_user(
+                    email=email,
+                    password="Senha#Forte123",
+                    nome=model.__name__,
+                    **extra_fields,
+                )
+
+                self.assertEqual(usuario.perfil.papel, papel)
+                self.assertEqual(usuario.perfil.usuario_id, usuario.pk)
+
+        administrador = Usuario.objects.create_superuser(
+            email="admin@exemplo.com",
+            password="Senha#Forte123",
+            nome="Administrador",
+        )
+        self.assertEqual(
+            administrador.perfil.papel,
+            Perfil.Papel.ADMINISTRADOR,
+        )
+
+        papel_recepcionista = Papel.objects.create(nome="Recepcionista")
+        recepcionista = Recepcionista.objects.create_user(
+            email="recepcionista@exemplo.com",
+            password="Senha#Forte123",
+            nome="Recepcionista",
+            papel=papel_recepcionista,
+        )
+        self.assertEqual(
+            recepcionista.perfil.papel,
+            Perfil.Papel.RECEPCIONISTA,
+        )
+
+    def test_papel_do_perfil_e_editavel_no_admin(self):
+        administrador = Usuario.objects.create_superuser(
+            email="admin@exemplo.com",
+            password="Senha#Forte123",
+            nome="Administrador",
+        )
+        cliente = Cliente.objects.create_user(
+            email="cliente@exemplo.com",
+            password="Senha#Forte123",
+            nome="Cliente",
+        )
+        self.client.force_login(administrador)
+        url = reverse("admin:agendamento_perfil_change", args=[cliente.perfil.pk])
+
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Profissional")
+
+        response = self.client.post(
+            url,
+            {
+                "usuario": cliente.pk,
+                "papel": Perfil.Papel.PROFISSIONAL,
+                "_save": "Salvar",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        cliente.perfil.refresh_from_db()
+        self.assertEqual(cliente.perfil.papel, Perfil.Papel.PROFISSIONAL)
+
+    def test_usuario_criado_pelo_admin_recebe_perfil_cliente(self):
+        administrador = Usuario.objects.create_superuser(
+            email="admin@exemplo.com",
+            password="Senha#Forte123",
+            nome="Administrador",
+        )
+        self.client.force_login(administrador)
+        response = self.client.post(
+            reverse("admin:agendamento_usuario_add"),
+            {
+                "email": "novo@exemplo.com",
+                "nome": "Novo Cliente",
+                "password1": "Senha#Forte123",
+                "password2": "Senha#Forte123",
+                "_save": "Salvar",
+            },
+            follow=True,
+        )
+
+        usuario = Usuario.objects.get(email="novo@exemplo.com")
+        self.assertEqual(usuario.perfil.papel, Perfil.Papel.CLIENTE)
+        self.assertContains(response, "Novo Cliente")
 
 
 @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
@@ -165,3 +366,217 @@ class PasswordResetViewTests(TestCase):
 
         self.assertRedirects(response, reverse("password_reset_done"))
         self.assertEqual(len(mail.outbox), 0)
+
+
+class PerfilProfissionalTests(TestCase):
+    def setUp(self):
+        papel_profissional = Papel.objects.create(nome="Profissional")
+        self.profissional = Profissional.objects.create_user(
+            email="profissional@exemplo.com",
+            password="Senha#Forte123",
+            nome="Ana Silva",
+            papel=papel_profissional,
+            especialidade="Personal Trainer",
+            formacao="Educação Física",
+            apresentacao="Treinamento funcional e emagrecimento.",
+        )
+        self.servico = Servico.objects.create(
+            profissional=self.profissional,
+            nome="Avaliação Física",
+            tipo="Avaliação",
+            duracao_minutos=60,
+        )
+        self.horario_inicio = timezone.make_aware(
+            datetime.combine(timezone.localdate() + timedelta(days=1), time(8))
+        )
+        Disponibilidade.objects.create(
+            profissional=self.profissional,
+            dia_semana=self.horario_inicio.weekday(),
+            hora_inicio=time(8),
+            hora_fim=time(12),
+        )
+
+    def test_lista_de_profissionais_abre_o_perfil(self):
+        response = self.client.get(reverse("profissionais"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.profissional.nome)
+        self.assertContains(
+            response,
+            reverse("profissional_detail", args=[self.profissional.pk]),
+        )
+
+    def test_perfil_exibe_dados_servicos_e_proximos_horarios(self):
+        response = self.client.get(
+            reverse("profissional_detail", args=[self.profissional.pk])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Personal Trainer")
+        self.assertContains(response, "Treinamento funcional e emagrecimento.")
+        self.assertContains(response, "Avaliação Física")
+        self.assertContains(response, "60 min")
+        self.assertContains(
+            response,
+            timezone.localtime(self.horario_inicio).strftime(
+                "%d/%m/%Y às %H:%M"
+            ),
+        )
+        self.assertContains(
+            response,
+            reverse("novo_agendamento", args=[self.servico.pk]),
+        )
+
+    def test_perfil_omite_horarios_ocupados_e_bloqueados(self):
+        papel_cliente = Papel.objects.create(nome="Cliente")
+        cliente = Cliente.objects.create_user(
+            email="cliente@exemplo.com",
+            password="Senha#Forte123",
+            nome="João Pereira",
+            papel=papel_cliente,
+        )
+        Agendamento.objects.create(
+            cliente=cliente,
+            profissional=self.profissional,
+            servico=self.servico,
+            data_hora_inicio=self.horario_inicio + timedelta(hours=2),
+            data_hora_fim=self.horario_inicio + timedelta(hours=3),
+        )
+        Bloqueio.objects.create(
+            profissional=self.profissional,
+            inicio=self.horario_inicio,
+            fim=self.horario_inicio + timedelta(hours=1),
+            motivo="Indisponível",
+        )
+
+        response = self.client.get(
+            reverse("profissional_detail", args=[self.profissional.pk])
+        )
+
+        inicio = timezone.localtime(self.horario_inicio)
+        self.assertNotContains(response, inicio.strftime("%d/%m/%Y às %H:%M"))
+        self.assertNotContains(
+            response,
+            (inicio + timedelta(hours=2)).strftime("%d/%m/%Y às %H:%M"),
+        )
+        self.assertContains(
+            response,
+            (inicio + timedelta(hours=1)).strftime("%d/%m/%Y às %H:%M"),
+        )
+        self.assertContains(
+            response,
+            (inicio + timedelta(hours=3)).strftime("%d/%m/%Y às %H:%M"),
+        )
+
+
+class NovoAgendamentoViewTests(TestCase):
+    def setUp(self):
+        papel_profissional = Papel.objects.create(nome="Profissional")
+        self.profissional = Profissional.objects.create_user(
+            email="profissional@exemplo.com",
+            password="Senha#Forte123",
+            nome="Ana Silva",
+            papel=papel_profissional,
+            especialidade="Personal Trainer",
+        )
+        papel_cliente = Papel.objects.create(nome="Cliente")
+        self.cliente = Cliente.objects.create_user(
+            email="cliente@exemplo.com",
+            password="Senha#Forte123",
+            nome="João Pereira",
+            papel=papel_cliente,
+        )
+        self.servico = Servico.objects.create(
+            profissional=self.profissional,
+            nome="Avaliação Física",
+            tipo="Avaliação",
+            duracao_minutos=60,
+        )
+        self.horario_inicio = timezone.make_aware(
+            datetime.combine(timezone.localdate() + timedelta(days=1), time(8))
+        )
+        Disponibilidade.objects.create(
+            profissional=self.profissional,
+            dia_semana=self.horario_inicio.weekday(),
+            hora_inicio=time(8),
+            hora_fim=time(12),
+        )
+
+    def test_exige_login_para_iniciar_agendamento(self):
+        response = self.client.get(
+            reverse("novo_agendamento", args=[self.servico.pk])
+        )
+
+        self.assertRedirects(
+            response,
+            f"{reverse('login')}?next={reverse('novo_agendamento', args=[self.servico.pk])}",
+        )
+
+    def test_confirma_agendamento_no_horario_escolhido(self):
+        self.client.force_login(self.cliente)
+        self.assertEqual(
+            self.client.get(reverse("login")).status_code,
+            200,
+        )
+        self.assertContains(self.client.get(reverse("login")), "Acesso realizado")
+        horario = self.horario_inicio
+        response = self.client.post(
+            reverse("novo_agendamento", args=[self.servico.pk]),
+            {"horario": horario.isoformat()},
+            follow=True,
+        )
+
+        self.assertEqual(
+            Agendamento.objects.count(),
+            1,
+            response.redirect_chain,
+        )
+        agendamento = Agendamento.objects.get()
+        self.assertEqual(agendamento.cliente_id, self.cliente.pk)
+        self.assertEqual(agendamento.profissional_id, self.profissional.pk)
+        self.assertEqual(agendamento.servico_id, self.servico.pk)
+        self.assertEqual(agendamento.data_hora_inicio, horario)
+        self.assertContains(response, "Agendamento confirmado com sucesso.")
+
+    def test_promove_conta_cliente_existente_ao_agendar(self):
+        usuario = Usuario.objects.create_user(
+            email="cliente-antigo@exemplo.com",
+            password="Senha#Forte123",
+            nome="Cliente antigo",
+            papel=self.cliente.perfil.papel,
+        )
+        self.client.force_login(usuario)
+        response = self.client.post(
+            reverse("novo_agendamento", args=[self.servico.pk]),
+            {"horario": self.horario_inicio.isoformat()},
+            follow=True,
+        )
+
+        self.assertTrue(Cliente.objects.filter(pk=usuario.pk).exists())
+        self.assertEqual(Agendamento.objects.get().cliente_id, usuario.pk)
+        self.assertContains(response, "Agendamento confirmado com sucesso.")
+
+    def test_nao_permite_confirmar_horario_que_foi_ocupado(self):
+        self.client.force_login(self.cliente)
+        outro_cliente = Cliente.objects.create_user(
+            email="outro@exemplo.com",
+            password="Senha#Forte123",
+            nome="Outro Cliente",
+            papel=self.cliente.perfil.papel,
+        )
+        horario = timezone.make_aware(datetime(2030, 1, 7, 8))
+        Agendamento.objects.create(
+            cliente=outro_cliente,
+            profissional=self.profissional,
+            servico=self.servico,
+            data_hora_inicio=horario,
+            data_hora_fim=horario + timedelta(hours=1),
+        )
+
+        response = self.client.post(
+            reverse("novo_agendamento", args=[self.servico.pk]),
+            {"horario": horario.isoformat()},
+        )
+
+        self.assertEqual(Agendamento.objects.count(), 1)
+        self.assertContains(response, "não está mais disponível")

@@ -33,9 +33,53 @@
         box-shadow: 0 1rem 2.5rem #17203312;
       }
 
+      main.wide {
+        width: min(100%, 56rem);
+      }
+
       h1 {
         margin: 0 0 1.75rem;
         font-size: 1.75rem;
+      }
+
+      h2 {
+        margin: 0 0 0.75rem;
+        font-size: 1.2rem;
+      }
+
+      section + section {
+        margin-top: 2rem;
+      }
+
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+        gap: 1rem;
+      }
+
+      .card {
+        padding: 1.25rem;
+        border: 1px solid #e1e6ef;
+        border-radius: 0.75rem;
+      }
+
+      .card h2 {
+        margin-bottom: 0.4rem;
+      }
+
+      .muted {
+        color: #687386;
+      }
+
+      .slots,
+      .availability {
+        margin: 0;
+        padding-left: 1.25rem;
+      }
+
+      .slots li,
+      .availability li {
+        margin: 0.35rem 0;
       }
 
       .field {
@@ -48,7 +92,8 @@
         font-weight: 600;
       }
 
-      input {
+      input,
+      select {
         width: 100%;
         padding: 0.75rem 0.85rem;
         border: 1px solid #b9c3d2;
@@ -112,6 +157,13 @@
         color: #2457c5;
       }
 
+      .text-link {
+        display: inline-block;
+        margin-top: 0.75rem;
+        color: #2457c5;
+        font-weight: 600;
+      }
+
       .success {
         margin: 0;
       }
@@ -128,7 +180,7 @@
     </style>
   </head>
   <body>
-    <main>
+    <main class="{% block main_class %}{% endblock %}">
       {% for message in messages %}
         <div class="notice" role="status">{{ message }}</div>
       {% endfor %}

@@ -1,0 +1,27 @@
+{% extends "agendamento/base.html" %}
+{% block title %}Profissionais{% endblock %}
+{% block main_class %}wide{% endblock %}
+{% block content %}
+  <h1>Profissionais</h1>
+  {% if profissionais %}
+    <div class="cards">
+      {% for profissional in profissionais %}
+        <article class="card">
+          <h2>{{ profissional.nome }}</h2>
+          <p>{{ profissional.especialidade }}</p>
+          {% if profissional.apresentacao %}
+            <p class="muted">{{ profissional.apresentacao|truncatewords:24 }}</p>
+          {% endif %}
+          <a class="text-link" href="{% url 'profissional_detail' profissional.pk %}">
+            Ver perfil e horários
+          </a>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p>Nenhum profissional disponível no momento.</p>
+  {% endif %}
+  <nav class="options" aria-label="Navegação da conta">
+    <a href="{% url 'login' %}">Voltar</a>
+  </nav>
+{% endblock %}

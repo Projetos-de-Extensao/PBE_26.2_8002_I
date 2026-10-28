@@ -70,6 +70,7 @@ TEMPLATES = [
 WSGI_APPLICATION = "project.wsgi.application"
 
 AUTH_USER_MODEL = "agendamento.Usuario"
+LOGIN_URL = "/"
 LOGIN_REDIRECT_URL = "/"
 
 

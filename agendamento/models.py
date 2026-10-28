@@ -3,24 +3,29 @@ from datetime import datetime, timedelta
 from django.contrib.auth.base_user import BaseUserManager
 from django.contrib.auth.models import AbstractUser
 from django.core.validators import MinValueValidator
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Q
 
 
 class UsuarioManager(BaseUserManager):
     use_in_migrations = True
 
+    @transaction.atomic
     def create_user(self, email, password=None, **extra_fields):
         if not email:
             raise ValueError("O e-mail deve ser informado.")
+        papel_inicial = extra_fields.pop("papel", None)
         extra_fields.setdefault("is_staff", False)
         extra_fields.setdefault("is_superuser", False)
         user = self.model(email=self.normalize_email(email), **extra_fields)
+        if papel_inicial is not None:
+            user._papel_inicial = getattr(papel_inicial, "nome", papel_inicial)
         user.set_password(password)
         user.save(using=self._db)
         return user
 
     def create_superuser(self, email, password=None, **extra_fields):
+        extra_fields.pop("papel", None)
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
         extra_fields.setdefault("is_active", True)
@@ -30,7 +35,12 @@ class UsuarioManager(BaseUserManager):
         if extra_fields.get("is_superuser") is not True:
             raise ValueError("Superusuários devem ter is_superuser=True.")
 
-        return self.create_user(email, password, **extra_fields)
+        return self.create_user(
+            email,
+            password,
+            papel="administrador",
+            **extra_fields,
+        )
 
 
 class Papel(models.Model):
@@ -68,14 +78,9 @@ class Usuario(AbstractUser):
     email = models.EmailField(unique=True)
     nome = models.CharField(max_length=150)
     objects = UsuarioManager()
-    papel = models.ForeignKey(
-        Papel,
-        on_delete=models.PROTECT,
-        related_name="usuarios",
-    )
 
     USERNAME_FIELD = "email"
-    REQUIRED_FIELDS = ["nome", "papel"]
+    REQUIRED_FIELDS = ["nome"]
 
     class Meta:
         verbose_name = "usuario"
@@ -84,6 +89,33 @@ class Usuario(AbstractUser):
 
     def __str__(self):
         return self.nome
+
+
+class Perfil(models.Model):
+    class Papel(models.TextChoices):
+        CLIENTE = "cliente", "Cliente"
+        PROFISSIONAL = "profissional", "Profissional"
+        RECEPCIONISTA = "recepcionista", "Recepcionista"
+        ADMINISTRADOR = "administrador", "Administrador"
+
+    usuario = models.OneToOneField(
+        Usuario,
+        on_delete=models.CASCADE,
+        related_name="perfil",
+    )
+    papel = models.CharField(
+        max_length=20,
+        choices=Papel.choices,
+        default=Papel.CLIENTE,
+    )
+
+    class Meta:
+        verbose_name = "perfil"
+        verbose_name_plural = "perfis"
+        ordering = ("usuario__nome",)
+
+    def __str__(self):
+        return f"{self.usuario.nome} — {self.get_papel_display()}"
 
 
 class Cliente(Usuario):
@@ -95,6 +127,7 @@ class Cliente(Usuario):
 class Profissional(Usuario):
     especialidade = models.CharField(max_length=150)
     formacao = models.TextField(blank=True)
+    apresentacao = models.TextField(blank=True)
 
     class Meta:
         verbose_name = "profissional"
@@ -348,8 +381,9 @@ class Agendamento(models.Model):
         if self.sala_id is not None:
             alvos |= Q(sala_id=self.sala_id)
 
-        recursos_exclusivos = self.recursos.filter(exclusivo=True)
-        if self.pk is not None and recursos_exclusivos.exists():
-            alvos |= Q(recursos__in=recursos_exclusivos)
+        if self.pk is not None:
+            recursos_exclusivos = self.recursos.filter(exclusivo=True)
+            if recursos_exclusivos.exists():
+                alvos |= Q(recursos__in=recursos_exclusivos)
 
         return conflitos.filter(alvos).distinct().exists()
