@@ -427,6 +427,12 @@ class NovoAgendamentoViewTests(TestCase):
         self.assertEqual(ag.cliente, self.cliente)
         self.assertEqual(ag.hora_fim, time(17))
 
+    def test_tela_tem_modal_de_confirmacao(self):
+        self.client.login(username="cliente1", password="segredo")
+        resposta = self.client.get(self.url)
+        self.assertContains(resposta, 'id="modal-confirmacao"')
+        self.assertContains(resposta, "Confirmar agendamento")
+
     def test_mostra_erro_de_conflito(self):
         self.client.login(username="cliente1", password="segredo")
         dados = {
