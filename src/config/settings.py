@@ -117,6 +117,11 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# Sem esta linha, qualquer tela protegida redireciona para /accounts/login/,
+# que não existe neste projeto, e o usuário vê "página não encontrada".
+# A entrada é pelo admin enquanto a tela de login do app principal não existe.
+LOGIN_URL = '/admin/login/'
+
 
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
