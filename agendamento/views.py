@@ -2,7 +2,6 @@ from datetime import datetime, time, timedelta
 
 from django import forms
 from django.contrib import messages
-from django.contrib.auth import login
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView as DjangoLoginView
@@ -32,6 +31,12 @@ from agendamento.models import (
 
 def _acesso_negado(request):
     return render(request, "agendamento/acesso_negado.html", status=403)
+
+
+def _url_tela_inicial(usuario):
+    if usuario.perfil.papel == Perfil.Papel.ADMINISTRADOR:
+        return reverse("administracao")
+    return reverse("inicio")
 
 
 def _cliente_para_usuario(usuario):
@@ -171,7 +176,9 @@ class EmailAuthenticationForm(AuthenticationForm):
 class LoginView(DjangoLoginView):
     authentication_form = EmailAuthenticationForm
     template_name = "agendamento/login.html"
-    next_page = reverse_lazy("inicio")
+
+    def get_success_url(self):
+        return _url_tela_inicial(self.request.user)
 
 
 class CadastroForm(forms.Form):
@@ -277,14 +284,13 @@ class CadastroForm(forms.Form):
 class CadastroView(FormView):
     form_class = CadastroForm
     template_name = "agendamento/cadastro.html"
-    success_url = reverse_lazy("inicio")
+    success_url = reverse_lazy("login")
 
     def form_valid(self, form):
-        usuario = form.save()
-        login(self.request, usuario)
+        form.save()
         messages.success(
             self.request,
-            _("Conta criada com sucesso."),
+            _("Conta criada com sucesso. Entre com seu e-mail e senha."),
         )
         return super().form_valid(form)
 
@@ -294,14 +300,44 @@ class InicioView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        perfil = self.request.user.perfil
-        context["papel"] = perfil.get_papel_display()
-        context["eh_cliente"] = perfil.papel == Perfil.Papel.CLIENTE
-        context["pode_administrar"] = (
-            perfil.papel == Perfil.Papel.ADMINISTRADOR
-            and self.request.user.is_active
-            and self.request.user.is_staff
+        usuario = self.request.user
+        perfil = usuario.perfil
+        agora = timezone.now()
+        context.update(
+            {
+                "papel": perfil.get_papel_display(),
+                "eh_cliente": perfil.papel == Perfil.Papel.CLIENTE,
+                "eh_profissional": perfil.papel == Perfil.Papel.PROFISSIONAL,
+                "eh_recepcionista": perfil.papel == Perfil.Papel.RECEPCIONISTA,
+            }
         )
+
+        if perfil.papel in (
+            Perfil.Papel.CLIENTE,
+            Perfil.Papel.PROFISSIONAL,
+        ):
+            campo = (
+                "cliente_id"
+                if perfil.papel == Perfil.Papel.CLIENTE
+                else "profissional_id"
+            )
+            context["agendamentos"] = (
+                Agendamento.objects.filter(**{campo: usuario.pk})
+                .filter(data_hora_inicio__gte=agora)
+                .exclude(status=Agendamento.Status.CANCELADO)
+                .select_related("cliente", "profissional", "servico", "sala")
+                .order_by("data_hora_inicio")[:10]
+            )
+        elif perfil.papel == Perfil.Papel.RECEPCIONISTA:
+            hoje = timezone.localdate()
+            context["agendamentos"] = (
+                Agendamento.objects.filter(data_hora_inicio__date=hoje)
+                .exclude(status=Agendamento.Status.CANCELADO)
+                .select_related("cliente", "profissional", "servico", "sala")
+                .order_by("data_hora_inicio")
+            )
+            context["hoje"] = hoje
+
         return context
 
 
@@ -347,7 +383,7 @@ class PerfilEdicaoView(LoginRequiredMixin, View):
         if form.is_valid():
             form.save()
             messages.success(request, _("Perfil atualizado com sucesso."))
-            return HttpResponseRedirect(reverse("inicio"))
+            return HttpResponseRedirect(_url_tela_inicial(request.user))
         return self.render_form(request, form)
 
 

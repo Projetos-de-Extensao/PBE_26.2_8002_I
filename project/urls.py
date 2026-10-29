@@ -24,6 +24,17 @@ from django.contrib.auth.views import (
 )
 from django.urls import path, reverse_lazy
 
+from agendamento.administracao import (
+    AdministracaoView,
+    ProfissionalCreateView,
+    ProfissionalUpdateView,
+    RecursoCreateView,
+    RecursoUpdateView,
+    SalaCreateView,
+    SalaUpdateView,
+    ServicoCreateView,
+    ServicoUpdateView,
+)
 from agendamento.views import (
     AgendaClienteView,
     CadastroView,
@@ -39,6 +50,47 @@ from agendamento.admin_site import admin_site
 
 urlpatterns = [
     path("admin/", admin_site.urls),
+    path("administracao/", AdministracaoView.as_view(), name="administracao"),
+    path(
+        "administracao/profissionais/novo/",
+        ProfissionalCreateView.as_view(),
+        name="administracao_profissional_novo",
+    ),
+    path(
+        "administracao/profissionais/<int:pk>/editar/",
+        ProfissionalUpdateView.as_view(),
+        name="administracao_profissional_editar",
+    ),
+    path(
+        "administracao/servicos/novo/",
+        ServicoCreateView.as_view(),
+        name="administracao_servico_novo",
+    ),
+    path(
+        "administracao/servicos/<int:pk>/editar/",
+        ServicoUpdateView.as_view(),
+        name="administracao_servico_editar",
+    ),
+    path(
+        "administracao/salas/nova/",
+        SalaCreateView.as_view(),
+        name="administracao_sala_nova",
+    ),
+    path(
+        "administracao/salas/<int:pk>/editar/",
+        SalaUpdateView.as_view(),
+        name="administracao_sala_editar",
+    ),
+    path(
+        "administracao/recursos/novo/",
+        RecursoCreateView.as_view(),
+        name="administracao_recurso_novo",
+    ),
+    path(
+        "administracao/recursos/<int:pk>/editar/",
+        RecursoUpdateView.as_view(),
+        name="administracao_recurso_editar",
+    ),
     path("", LoginView.as_view(), name="login"),
     path("inicio/", InicioView.as_view(), name="inicio"),
     path("cadastrar/", CadastroView.as_view(), name="cadastro"),

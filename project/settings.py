@@ -26,6 +26,11 @@ SECRET_KEY = "django-insecure-9jjh5xq!forpa^l6^+7_o+6%7*y7nqv@3c0887&sedal$ax8wt
 DEBUG = True
 
 ALLOWED_HOSTS = []
+CSRF_TRUSTED_ORIGINS = [
+    "https://localhost:8000",
+    "http://localhost:8000",
+]
+CSRF_COOKIE_NAME = "agendamento_csrftoken"
 
 
 # Application definition
