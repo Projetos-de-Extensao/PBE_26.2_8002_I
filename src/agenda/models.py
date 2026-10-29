@@ -127,12 +127,106 @@ class Servico(models.Model):
         return f"{self.nome} ({self.duracao_minutos} min)"
 
 
+DIAS_SEMANA = [
+    (0, "Segunda-feira"),
+    (1, "Terça-feira"),
+    (2, "Quarta-feira"),
+    (3, "Quinta-feira"),
+    (4, "Sexta-feira"),
+    (5, "Sábado"),
+    (6, "Domingo"),
+]
+
+
+class Disponibilidade(models.Model):
+    """Faixa de horário em que o profissional pode ser agendado.
+
+    RF07, RF09. RN05: só horários compatíveis com alguma faixa cadastrada
+    para o dia da semana correspondente podem ser selecionados.
+    """
+
+    profissional = models.ForeignKey(
+        Profissional, on_delete=models.CASCADE, related_name="disponibilidades"
+    )
+    dia_semana = models.PositiveSmallIntegerField("dia da semana", choices=DIAS_SEMANA)
+    hora_inicio = models.TimeField("hora de início")
+    hora_fim = models.TimeField("hora de término")
+
+    class Meta:
+        verbose_name = "disponibilidade"
+        verbose_name_plural = "disponibilidades"
+        ordering = ["profissional", "dia_semana", "hora_inicio"]
+
+    def __str__(self):
+        return (
+            f"{self.profissional} - {self.get_dia_semana_display()} "
+            f"{self.hora_inicio}-{self.hora_fim}"
+        )
+
+    def clean(self):
+        super().clean()
+        if self.hora_inicio and self.hora_fim and self.hora_fim <= self.hora_inicio:
+            raise ValidationError(
+                {"hora_fim": "O horário final deve ser posterior ao inicial."}
+            )
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+
+class Bloqueio(models.Model):
+    """Período em que o profissional fica indisponível (férias, almoço, curso...).
+
+    RF20. RN13: um bloqueio torna o intervalo indisponível para novos
+    agendamentos; se houver atendimento confirmado no período, o profissional
+    deve ser alertado antes da aplicação (ver `agendamentos_afetados`).
+    """
+
+    profissional = models.ForeignKey(
+        Profissional, on_delete=models.CASCADE, related_name="bloqueios"
+    )
+    data = models.DateField("data")
+    hora_inicio = models.TimeField("hora de início")
+    hora_fim = models.TimeField("hora de término")
+    motivo = models.CharField("motivo", max_length=200, blank=True)
+
+    class Meta:
+        verbose_name = "bloqueio"
+        verbose_name_plural = "bloqueios"
+        ordering = ["data", "hora_inicio"]
+
+    def __str__(self):
+        return f"{self.profissional} - {self.data} {self.hora_inicio}-{self.hora_fim}"
+
+    def clean(self):
+        super().clean()
+        if self.hora_inicio and self.hora_fim and self.hora_fim <= self.hora_inicio:
+            raise ValidationError(
+                {"hora_fim": "O horário final deve ser posterior ao inicial."}
+            )
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+    def agendamentos_afetados(self):
+        """Agendamentos ativos do profissional que se sobrepõem a este bloqueio (RN13)."""
+        return Agendamento.objects.filter(
+            profissional=self.profissional,
+            data=self.data,
+            hora_inicio__lt=self.hora_fim,
+            hora_fim__gt=self.hora_inicio,
+        ).exclude(status="CANCELADO")
+
+
 class Agendamento(models.Model):
     """Reserva de um atendimento entre um cliente e um profissional.
 
     RF10, RF13, RF14, RF15. RN01 (conflito do profissional), RN02 (conflito
-    do cliente), RN03 (conflito de sala), RN04 (conflito de recurso
-    exclusivo); agendamentos cancelados não bloqueiam horários.
+    do cliente), RN03 (sala), RN04 (recurso exclusivo), RN05
+    (disponibilidade), RN13 (bloqueio); agendamentos cancelados não bloqueiam
+    horários.
     """
 
     STATUS = [
@@ -202,6 +296,25 @@ class Agendamento(models.Model):
             )
         )
 
+    def _fora_da_disponibilidade(self):
+        """True se o horário não estiver contido em nenhuma faixa cadastrada
+        pelo profissional para o dia da semana da data do agendamento (RN05)."""
+        faixas = Disponibilidade.objects.filter(
+            profissional_id=self.profissional_id, dia_semana=self.data.weekday()
+        )
+        return not faixas.filter(
+            hora_inicio__lte=self.hora_inicio, hora_fim__gte=self.hora_fim
+        ).exists()
+
+    def _bloqueado(self):
+        """True se o horário se sobrepuser a um bloqueio do profissional (RN13)."""
+        return Bloqueio.objects.filter(
+            profissional_id=self.profissional_id,
+            data=self.data,
+            hora_inicio__lt=self.hora_fim,
+            hora_fim__gt=self.hora_inicio,
+        ).exists()
+
     def _calcular_hora_fim(self):
         """Hora de término = início + duração do serviço (RN07)."""
         if self.servico_id is None or self.hora_inicio is None:
@@ -225,6 +338,12 @@ class Agendamento(models.Model):
             )
         if self.status == "CANCELADO":
             return
+        if self.profissional_id and self._fora_da_disponibilidade():
+            raise ValidationError(
+                "Horário fora da disponibilidade cadastrada pelo profissional."
+            )
+        if self.profissional_id and self._bloqueado():
+            raise ValidationError("Horário bloqueado pelo profissional.")
         conflitantes = self._conflitantes()
         if self.profissional_id and conflitantes.filter(
             profissional_id=self.profissional_id
@@ -237,9 +356,7 @@ class Agendamento(models.Model):
         ).exists():
             raise ValidationError("O cliente já possui um agendamento neste horário.")
         if self.sala_id and conflitantes.filter(sala_id=self.sala_id).exists():
-            raise ValidationError(
-                {"sala": "A sala já está reservada neste horário."}
-            )
+            raise ValidationError({"sala": "A sala já está reservada neste horário."})
         # Recurso compartilhado pode ser usado por mais de um atendimento.
         if (
             self.recurso_id
@@ -254,3 +371,44 @@ class Agendamento(models.Model):
         # Garante as validações críticas no back-end, fora de formulários.
         self.clean()
         super().save(*args, **kwargs)
+
+
+def horarios_livres(profissional, data, duracao_minutos=30):
+    """Horários em que `profissional` pode receber um novo agendamento em `data`.
+
+    `duracao_minutos` é a duração do serviço a agendar. Descarta horários fora
+    da disponibilidade cadastrada e horários já ocupados por bloqueios ou
+    agendamentos ativos (RF09).
+    """
+    duracao = timedelta(minutes=duracao_minutos)
+    faixas = Disponibilidade.objects.filter(
+        profissional=profissional, dia_semana=data.weekday()
+    ).order_by("hora_inicio")
+
+    ocupados = [
+        (bloqueio.hora_inicio, bloqueio.hora_fim)
+        for bloqueio in Bloqueio.objects.filter(profissional=profissional, data=data)
+    ]
+    ocupados += [
+        (agendamento.hora_inicio, agendamento.hora_fim)
+        for agendamento in Agendamento.objects.filter(
+            profissional=profissional, data=data
+        ).exclude(status="CANCELADO")
+    ]
+
+    livres = []
+    for faixa in faixas:
+        cursor = datetime.combine(data, faixa.hora_inicio)
+        fim_faixa = datetime.combine(data, faixa.hora_fim)
+        while cursor + duracao <= fim_faixa:
+            inicio_slot = cursor.time()
+            fim_slot = (cursor + duracao).time()
+            ocupado = any(
+                inicio_slot < fim_ocupado and fim_slot > inicio_ocupado
+                for inicio_ocupado, fim_ocupado in ocupados
+            )
+            if not ocupado:
+                livres.append(inicio_slot)
+            cursor += duracao
+
+    return livres

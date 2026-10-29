@@ -1,0 +1,68 @@
+{% extends "agendamento/base.html" %}
+{% block title %}{{ profissional.nome }} | Perfil profissional{% endblock %}
+{% block main_class %}wide{% endblock %}
+{% block content %}
+  <h1>{{ profissional.nome }}</h1>
+  <p><strong>Especialidade:</strong> {{ profissional.especialidade }}</p>
+  {% if profissional.formacao %}
+    <p><strong>Formação:</strong> {{ profissional.formacao|linebreaksbr }}</p>
+  {% endif %}
+
+  <section aria-labelledby="apresentacao-heading">
+    <h2 id="apresentacao-heading">Apresentação</h2>
+    {% if profissional.apresentacao %}
+      <p>{{ profissional.apresentacao|linebreaksbr }}</p>
+    {% else %}
+      <p class="muted">Apresentação ainda não informada.</p>
+    {% endif %}
+  </section>
+
+  <section aria-labelledby="servicos-heading">
+    <h2 id="servicos-heading">Serviços e próximos horários livres</h2>
+    {% if servicos %}
+      <div class="cards">
+        {% for servico in servicos %}
+          <article class="card">
+            <h2>{{ servico.nome }}</h2>
+            <p>{{ servico.tipo }} · {{ servico.duracao_minutos }} min</p>
+            {% if servico.proximos_horarios %}
+              <p><strong>Próximos horários:</strong></p>
+              <ul class="slots">
+                {% for horario in servico.proximos_horarios %}
+                  <li>{{ horario|date:"d/m/Y" }} às {{ horario|date:"H:i" }}</li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p class="muted">Sem horários livres nos próximos 30 dias.</p>
+            {% endif %}
+            <a class="text-link" href="{% url 'novo_agendamento' servico.id %}">
+              Escolher serviço e agendar
+            </a>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">Este profissional ainda não cadastrou serviços.</p>
+    {% endif %}
+  </section>
+
+  <section aria-labelledby="disponibilidade-heading">
+    <h2 id="disponibilidade-heading">Disponibilidade semanal</h2>
+    {% if profissional.disponibilidades.all %}
+      <ul class="availability">
+        {% for disponibilidade in profissional.disponibilidades.all %}
+          <li>
+            {{ disponibilidade.get_dia_semana_display }}:
+            {{ disponibilidade.hora_inicio|time:"H:i" }}–{{ disponibilidade.hora_fim|time:"H:i" }}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">Disponibilidade ainda não informada.</p>
+    {% endif %}
+  </section>
+
+  <nav class="options" aria-label="Navegação de profissionais">
+    <a href="{% url 'profissionais' %}">Voltar aos profissionais</a>
+  </nav>
+{% endblock %}
