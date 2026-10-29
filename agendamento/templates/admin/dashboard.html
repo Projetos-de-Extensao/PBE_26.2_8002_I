@@ -1,0 +1,184 @@
+{% extends "agendamento/base.html" %}
+{% block title %}Painel administrativo{% endblock %}
+{% block main_class %}wide{% endblock %}
+{% block content %}
+  <header>
+    <h1>Administração</h1>
+    <p>Gerencie os cadastros e acompanhe a operação de hoje ({{ hoje|date:"d/m/Y" }}).</p>
+    <nav class="options" aria-label="Navegação administrativa">
+      <a href="{% url 'admin:agendamento_usuario_changelist' %}">Gerenciar usuários</a>
+      <a href="{% url 'admin:agendamento_perfil_changelist' %}">Gerenciar papéis</a>
+      <a href="{% url 'login' %}">Voltar</a>
+    </nav>
+  </header>
+
+  <section aria-label="Resumo">
+    <div class="cards">
+      <article class="card">
+        <h2>Profissionais</h2>
+        <p>{{ total_profissionais }} cadastrados</p>
+      </article>
+      <article class="card">
+        <h2>Serviços</h2>
+        <p>{{ total_servicos }} cadastrados</p>
+      </article>
+      <article class="card">
+        <h2>Salas</h2>
+        <p>{{ total_salas }} cadastradas</p>
+      </article>
+      <article class="card">
+        <h2>Equipamentos</h2>
+        <p>{{ total_recursos }} cadastrados</p>
+      </article>
+    </div>
+  </section>
+
+  <section aria-labelledby="profissionais-heading">
+    <h2 id="profissionais-heading">Profissionais</h2>
+    <p><a class="button-link" href="{% url 'administracao_profissional_novo' %}">Cadastrar profissional</a></p>
+    {% if profissionais %}
+      <div class="cards">
+        {% for profissional in profissionais %}
+          <article class="card">
+            <h3>{{ profissional.nome }}</h3>
+            <p>{{ profissional.especialidade }} · {{ profissional.get_modalidade_display }}</p>
+            <p class="muted">{{ profissional.email }} · {% if profissional.is_active %}Ativo{% else %}Inativo{% endif %}</p>
+            <a class="text-link" href="{% url 'administracao_profissional_editar' profissional.pk %}">Editar profissional</a>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">Nenhum profissional cadastrado.</p>
+    {% endif %}
+  </section>
+
+  <section aria-labelledby="servicos-heading">
+    <h2 id="servicos-heading">Serviços</h2>
+    <p><a class="button-link" href="{% url 'administracao_servico_novo' %}">Cadastrar serviço</a></p>
+    {% if servicos %}
+      <div class="cards">
+        {% for servico in servicos %}
+          <article class="card">
+            <h3>{{ servico.nome }}</h3>
+            <p>{{ servico.tipo }} · {{ servico.duracao_minutos }} minutos</p>
+            <p class="muted">Profissional: {{ servico.profissional.nome }}</p>
+            <a class="text-link" href="{% url 'administracao_servico_editar' servico.pk %}">Editar serviço</a>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">Nenhum serviço cadastrado.</p>
+    {% endif %}
+  </section>
+
+  <section aria-labelledby="salas-heading">
+    <h2 id="salas-heading">Salas e ocupação de hoje</h2>
+    <p><a class="button-link" href="{% url 'administracao_sala_nova' %}">Cadastrar sala</a></p>
+    {% if salas %}
+      <div class="cards">
+        {% for sala in salas %}
+          <article class="card">
+            <h3>{{ sala.nome }}</h3>
+            <p>Capacidade: {{ sala.capacidade }} pessoas</p>
+            <p><strong>{{ sala.agendamentos.all|length }}</strong> agendamentos ativos hoje</p>
+            {% if sala.agendamentos.all %}
+              <ul>
+                {% for agendamento in sala.agendamentos.all %}
+                  <li>{{ agendamento.data_hora_inicio|date:"H:i" }}–{{ agendamento.data_hora_fim|date:"H:i" }} · {{ agendamento.servico.nome }}</li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p class="muted">Sem reservas hoje.</p>
+            {% endif %}
+            <a class="text-link" href="{% url 'administracao_sala_editar' sala.pk %}">Editar sala</a>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">Nenhuma sala cadastrada.</p>
+    {% endif %}
+  </section>
+
+  <section aria-labelledby="recursos-heading">
+    <h2 id="recursos-heading">Equipamentos e ocupação de hoje</h2>
+    <p><a class="button-link" href="{% url 'administracao_recurso_novo' %}">Cadastrar equipamento</a></p>
+    {% if recursos %}
+      <div class="cards">
+        {% for recurso in recursos %}
+          <article class="card">
+            <h3>{{ recurso.nome }}</h3>
+            <p>{% if recurso.exclusivo %}Uso exclusivo{% else %}Uso compartilhado{% endif %}</p>
+            <p><strong>{{ recurso.agendamentos.all|length }}</strong> agendamentos ativos hoje</p>
+            {% if recurso.agendamentos.all %}
+              <ul>
+                {% for agendamento in recurso.agendamentos.all %}
+                  <li>{{ agendamento.data_hora_inicio|date:"H:i" }}–{{ agendamento.data_hora_fim|date:"H:i" }} · {{ agendamento.servico.nome }}</li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p class="muted">Sem reservas hoje.</p>
+            {% endif %}
+            <a class="text-link" href="{% url 'administracao_recurso_editar' recurso.pk %}">Editar equipamento</a>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">Nenhum equipamento cadastrado.</p>
+    {% endif %}
+  </section>
+
+  <section aria-labelledby="agendamentos-heading">
+    <h2 id="agendamentos-heading">Agendamentos de hoje</h2>
+    {% if agendamentos_hoje %}
+      <div class="cards">
+        {% for agendamento in agendamentos_hoje %}
+          <article class="card">
+            <h3>{{ agendamento.data_hora_inicio|date:"H:i" }}–{{ agendamento.data_hora_fim|date:"H:i" }}</h3>
+            <p>{{ agendamento.servico.nome }} · {{ agendamento.get_status_display }}</p>
+            <p>Cliente: {{ agendamento.cliente.nome }}</p>
+            <p>Profissional: {{ agendamento.profissional.nome }}</p>
+            <p class="muted">
+              Sala: {{ agendamento.sala|default:"Não reservada" }}
+              {% if agendamento.recursos.all %}
+                · Equipamentos:
+                {% for recurso in agendamento.recursos.all %}{% if not forloop.first %}, {% endif %}{{ recurso.nome }}{% endfor %}
+              {% endif %}
+            </p>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">Não há agendamentos para hoje.</p>
+    {% endif %}
+  </section>
+
+  <section aria-labelledby="usuarios-heading">
+    <h2 id="usuarios-heading">Usuários e permissões</h2>
+    <p>O papel determina as operações disponíveis para cada pessoa (RN08, RN09 e RN14).</p>
+    <div class="cards">
+      {% for nome, permissoes in papeis %}
+        <article class="card">
+          <h3>{{ nome }}</h3>
+          <p>{{ permissoes }}</p>
+        </article>
+      {% endfor %}
+    </div>
+    <nav class="options" aria-label="Gestão de usuários e permissões">
+      <a href="{% url 'admin:agendamento_usuario_changelist' %}">Gerenciar contas, acesso e status</a>
+      <a href="{% url 'admin:agendamento_perfil_changelist' %}">Atribuir papel a um usuário</a>
+    </nav>
+    {% if usuarios %}
+      <div class="cards">
+        {% for usuario in usuarios %}
+          <article class="card">
+            <h3>{{ usuario.nome }}</h3>
+            <p>{{ usuario.email }}</p>
+            <p class="muted">{{ usuario.perfil.get_papel_display }} · {% if usuario.is_active %}Ativo{% else %}Inativo{% endif %}</p>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">Nenhum usuário cadastrado.</p>
+    {% endif %}
+  </section>
+{% endblock %}

@@ -1,59 +1,76 @@
 {% extends "agendamento/base.html" %}
-{% block title %}Página inicial{% endblock %}
+{% block title %}Início | Agendamento{% endblock %}
 {% block main_class %}wide{% endblock %}
 {% block content %}
   <h1>Olá, {{ user.nome }}!</h1>
-  <p>Você entrou como <strong>{{ papel }}</strong>. O que deseja fazer?</p>
-  <p class="muted">{{ user.email }}</p>
+  <p>Você entrou como <strong>{{ papel }}</strong>.</p>
 
-  <section class="cards" aria-label="Atalhos">
-    {% if eh_cliente %}
-      <article class="card">
-        <h2>Encontrar profissional</h2>
-        <p>Pesquise por especialidade, serviço ou modalidade e escolha um horário.</p>
-        <a class="button-link" href="{% url 'profissionais' %}">Buscar profissionais</a>
-      </article>
-      <article class="card">
-        <h2>Minha agenda</h2>
-        <p>Consulte seus atendimentos e gerencie seus agendamentos.</p>
-        <a class="button-link" href="{% url 'minha_agenda' %}">Abrir minha agenda</a>
-      </article>
-    {% elif pode_administrar %}
-      <article class="card">
-        <h2>Administração</h2>
-        <p>Gerencie usuários, profissionais, serviços e salas.</p>
-        <a class="button-link" href="{% url 'admin:index' %}">Acessar administração</a>
-      </article>
-    {% elif user.perfil.papel == "profissional" %}
-      <article class="card">
-        <h2>Meu perfil profissional</h2>
-        <p>Mantenha seus dados de apresentação atualizados.</p>
-        <a class="button-link" href="{% url 'perfil' %}">Editar meu perfil</a>
-      </article>
-      <article class="card">
-        <h2>Profissionais</h2>
-        <p>Consulte os perfis públicos disponíveis na plataforma.</p>
-        <a class="button-link" href="{% url 'profissionais' %}">Ver profissionais</a>
-      </article>
-    {% else %}
-      <article class="card">
-        <h2>Seu perfil</h2>
-        <p>Atualize seu nome e telefone de contato.</p>
-        <a class="button-link" href="{% url 'perfil' %}">Editar meu perfil</a>
-      </article>
-    {% endif %}
+  {% if eh_cliente %}
+    <section aria-labelledby="cliente-heading">
+      <h2 id="cliente-heading">Seus próximos atendimentos</h2>
+      {% if agendamentos %}
+        <div class="cards">
+          {% for agendamento in agendamentos %}
+            <article class="card">
+              <h3>{{ agendamento.servico.nome }}</h3>
+              <p>{{ agendamento.data_hora_inicio|date:"d/m/Y" }} às {{ agendamento.data_hora_inicio|date:"H:i" }}</p>
+              <p>Profissional: {{ agendamento.profissional.nome }}</p>
+              <p>Status: {{ agendamento.get_status_display }}</p>
+              <a class="text-link" href="{% url 'minha_agenda' %}">Ver minha agenda</a>
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p>Você ainda não tem próximos atendimentos.</p>
+      {% endif %}
+      <a class="button-link" href="{% url 'profissionais' %}">Buscar profissionais e agendar</a>
+    </section>
+  {% elif eh_profissional %}
+    <section aria-labelledby="profissional-heading">
+      <h2 id="profissional-heading">Sua agenda</h2>
+      <p><a class="text-link" href="{% url 'profissional_detail' user.pk %}">Ver perfil público</a></p>
+      {% if agendamentos %}
+        <div class="cards">
+          {% for agendamento in agendamentos %}
+            <article class="card">
+              <h3>{{ agendamento.servico.nome }}</h3>
+              <p>{{ agendamento.data_hora_inicio|date:"d/m/Y" }} às {{ agendamento.data_hora_inicio|date:"H:i" }}</p>
+              <p>Cliente: {{ agendamento.cliente.nome }}</p>
+              <p>Status: {{ agendamento.get_status_display }}</p>
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p>Você não tem próximos atendimentos agendados.</p>
+      {% endif %}
+    </section>
+  {% elif eh_recepcionista %}
+    <section aria-labelledby="recepcao-heading">
+      <h2 id="recepcao-heading">Agenda de hoje{% if hoje %} — {{ hoje|date:"d/m/Y" }}{% endif %}</h2>
+      {% if agendamentos %}
+        <div class="cards">
+          {% for agendamento in agendamentos %}
+            <article class="card">
+              <h3>{{ agendamento.data_hora_inicio|date:"H:i" }}–{{ agendamento.data_hora_fim|date:"H:i" }}</h3>
+              <p>{{ agendamento.servico.nome }} · {{ agendamento.get_status_display }}</p>
+              <p>Cliente: {{ agendamento.cliente.nome }}</p>
+              <p>Profissional: {{ agendamento.profissional.nome }}</p>
+              {% if agendamento.sala %}<p>Sala: {{ agendamento.sala.nome }}</p>{% endif %}
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p>Não há atendimentos agendados para hoje.</p>
+      {% endif %}
+      <p>Seu perfil de recepção não tem acesso à gestão administrativa.</p>
+    </section>
+  {% endif %}
 
-    {% if not pode_administrar and user.perfil.papel != "profissional" %}
-      <article class="card">
-        <h2>Meus dados</h2>
-        <p>Revise ou atualize as informações do seu perfil.</p>
-        <a class="button-link" href="{% url 'perfil' %}">Editar perfil</a>
-      </article>
-    {% endif %}
-  </section>
-
-  <form method="post" action="{% url 'logout' %}">
-    {% csrf_token %}
-    <button type="submit">Sair da conta</button>
-  </form>
+  <nav class="options" aria-label="Opções da conta">
+    <a href="{% url 'perfil' %}">Editar perfil</a>
+    <form method="post" action="{% url 'logout' %}">
+      {% csrf_token %}
+      <button type="submit">Sair</button>
+    </form>
+  </nav>
 {% endblock %}

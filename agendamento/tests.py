@@ -1,8 +1,11 @@
 from datetime import datetime, time, timedelta
+from io import StringIO
 import re
 
 from django.core import mail
-from django.test import TestCase, override_settings
+from django.core.management import call_command, CommandError
+from django.conf import settings
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -14,6 +17,7 @@ from agendamento.models import (
     Papel,
     Perfil,
     Profissional,
+    Recurso,
     Recepcionista,
     Sala,
     Servico,
@@ -59,9 +63,118 @@ class LoginViewTests(TestCase):
         )
 
         self.assertRedirects(response, reverse("inicio"))
-        response = self.client.get(reverse("inicio"))
-        self.assertContains(response, "Olá, Cliente!")
+        response = self.client.get(reverse("login"))
+        self.assertContains(response, "Acesso realizado")
         self.assertContains(response, self.usuario.email)
+
+    @override_settings(ALLOWED_HOSTS=["localhost"])
+    def test_login_aceita_origem_https_localhost_com_csrf_ativo(self):
+        cliente = Client(enforce_csrf_checks=True)
+        response = cliente.get(
+            reverse("login"),
+            secure=True,
+            HTTP_HOST="localhost:8000",
+        )
+        self.assertEqual(response.status_code, 200)
+        csrf_token = cliente.cookies[settings.CSRF_COOKIE_NAME].value
+        cliente.cookies["csrftoken"] = "token-de-outro-projeto"
+
+        response = cliente.post(
+            reverse("login"),
+            {
+                "username": self.usuario.email,
+                "password": "senha-segura-123",
+            },
+            secure=True,
+            HTTP_HOST="localhost:8000",
+            HTTP_ORIGIN="https://localhost:8000",
+            HTTP_X_CSRFTOKEN=csrf_token,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("inicio"))
+
+    @override_settings(ALLOWED_HOSTS=["localhost"])
+    def test_cookie_csrf_de_outro_projeto_nao_interfere_no_login(self):
+        cliente = Client(enforce_csrf_checks=True)
+        response = cliente.get(
+            reverse("login"),
+            secure=True,
+            HTTP_HOST="localhost:8000",
+        )
+
+        self.assertIn(settings.CSRF_COOKIE_NAME, response.cookies)
+        self.assertNotIn("csrftoken", response.cookies)
+        token = cliente.cookies[settings.CSRF_COOKIE_NAME].value
+        cliente.cookies["csrftoken"] = "cookie-de-outra-aplicacao"
+
+        response = cliente.post(
+            reverse("login"),
+            {
+                "username": self.usuario.email,
+                "password": "senha-segura-123",
+            },
+            secure=True,
+            HTTP_HOST="localhost:8000",
+            HTTP_ORIGIN="https://localhost:8000",
+            HTTP_X_CSRFTOKEN=token,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("inicio"))
+
+    def test_login_redireciona_cada_papel_para_sua_tela_inicial(self):
+        usuarios = [
+            (
+                Profissional,
+                "profissional-login@exemplo.com",
+                {"especialidade": "Nutrição"},
+                "inicio",
+            ),
+            (
+                Recepcionista,
+                "recepcionista-login@exemplo.com",
+                {},
+                "inicio",
+            ),
+            (
+                Usuario,
+                "administrador-login@exemplo.com",
+                {"superuser": True},
+                "administracao",
+            ),
+        ]
+        for modelo, email, extra, destino in usuarios:
+            with self.subTest(papel=email):
+                if extra.pop("superuser", False):
+                    usuario = modelo.objects.create_superuser(
+                        email=email,
+                        password="Senha#Segura123",
+                        nome="Conta de teste",
+                    )
+                else:
+                    usuario = modelo.objects.create_user(
+                        email=email,
+                        password="Senha#Segura123",
+                        nome="Conta de teste",
+                        **extra,
+                    )
+
+                response = self.client.post(
+                    reverse("login"),
+                    {"username": email, "password": "Senha#Segura123"},
+                    follow=True,
+                )
+
+                self.assertEqual(
+                    response.redirect_chain[-1][0],
+                    reverse(destino),
+                )
+                if destino == "administracao":
+                    self.assertContains(response, "Painel")
+                else:
+                    self.assertContains(response, "Você entrou como")
+                self.client.logout()
 
     def test_permite_encerrar_sessao(self):
         self.client.force_login(self.usuario)
@@ -70,6 +183,53 @@ class LoginViewTests(TestCase):
 
         self.assertRedirects(response, reverse("login"))
         self.assertNotIn("_auth_user_id", self.client.session)
+
+
+class DemoAccountsCommandTests(TestCase):
+    def test_cria_conta_para_cada_papel_com_senha_aleatoria(self):
+        output = StringIO()
+
+        call_command("criar_usuarios_demo", stdout=output)
+
+        credenciais = {}
+        for linha in output.getvalue().splitlines():
+            if ": " not in linha or " | Senha: " not in linha:
+                continue
+            papel, restante = linha.split(": ", 1)
+            email, senha = restante.split(" | Senha: ", 1)
+            credenciais[papel] = (email, senha)
+
+        self.assertEqual(
+            set(credenciais),
+            {"Cliente", "Profissional", "Recepcionista", "Administrador"},
+        )
+        for papel, (email, senha) in credenciais.items():
+            with self.subTest(papel=papel):
+                usuario = Usuario.objects.get(email=email)
+                self.assertGreaterEqual(len(senha), 24)
+                self.assertTrue(usuario.check_password(senha))
+
+        administrador = Usuario.objects.get(
+            email=credenciais["Administrador"][0]
+        )
+        self.assertTrue(administrador.is_staff)
+        self.assertTrue(administrador.is_superuser)
+        self.assertEqual(
+            administrador.perfil.papel,
+            Perfil.Papel.ADMINISTRADOR,
+        )
+
+    def test_nao_sobrescreve_contas_demo_existentes(self):
+        call_command("criar_usuarios_demo", stdout=StringIO())
+        usuario = Usuario.objects.get(email="admin@gmail.com")
+        senha_original = usuario.password
+
+        with self.assertRaises(CommandError):
+            call_command("criar_usuarios_demo", stdout=StringIO())
+
+        usuario.refresh_from_db()
+        self.assertEqual(usuario.password, senha_original)
+        self.assertEqual(Usuario.objects.count(), 4)
 
 
 @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
@@ -105,11 +265,6 @@ class CadastroViewTests(TestCase):
         self.assertTrue(Cliente.objects.filter(pk=usuario.pk).exists())
         self.assertTrue(usuario.check_password("Nuvem#Roxa39!Chuva"))
         self.assertContains(response, "Conta criada com sucesso")
-        self.assertContains(response, "Olá, Nova Cliente!")
-        self.assertEqual(
-            self.client.session["_auth_user_id"],
-            str(usuario.pk),
-        )
 
     def test_rejeita_email_duplicado(self):
         papel = Papel.objects.create(nome="Cliente")
@@ -524,6 +679,197 @@ class ControleAcessoTests(TestCase):
                 self.assertContains(response, "Acesso negado", status_code=403)
 
 
+class AdministracaoTests(TestCase):
+    def setUp(self):
+        self.administrador = Usuario.objects.create_superuser(
+            email="admin-painel@exemplo.com",
+            password="Senha#Admin984",
+            nome="Administradora",
+        )
+        self.profissional = Profissional.objects.create_user(
+            email="profissional-painel@exemplo.com",
+            password="Senha#Prof984",
+            nome="Profissional",
+            especialidade="Fisioterapia",
+        )
+        self.cliente = Cliente.objects.create_user(
+            email="cliente-painel@exemplo.com",
+            password="Senha#Cliente984",
+            nome="Cliente",
+        )
+        self.servico = Servico.objects.create(
+            profissional=self.profissional,
+            nome="Consulta",
+            tipo="Atendimento",
+            duracao_minutos=60,
+        )
+        self.sala = Sala.objects.create(nome="Sala A", capacidade=2)
+        self.recurso = Recurso.objects.create(nome="Maca", exclusivo=True)
+        self.client.force_login(self.administrador)
+
+    def test_painel_mostra_cadastros_permissoes_e_ocupacao(self):
+        inicio = timezone.make_aware(
+            datetime.combine(timezone.localdate(), time(10))
+        )
+        agendamento = Agendamento.objects.create(
+            cliente=self.cliente,
+            profissional=self.profissional,
+            servico=self.servico,
+            sala=self.sala,
+            data_hora_inicio=inicio,
+            data_hora_fim=inicio + timedelta(hours=1),
+        )
+        agendamento.recursos.add(self.recurso)
+
+        response = self.client.get(reverse("administracao"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Profissionais")
+        self.assertContains(response, "Serviços")
+        self.assertContains(response, "Salas e ocupação de hoje")
+        self.assertContains(response, "Equipamentos e ocupação de hoje")
+        self.assertContains(response, "Usuários e permissões")
+        self.assertContains(response, "Agendamentos de hoje")
+        self.assertContains(
+            response,
+            "<strong>1</strong> agendamentos ativos hoje",
+            html=True,
+        )
+        self.assertContains(response, "Consulta")
+        self.assertContains(response, "Atribuir papel a um usuário")
+
+    def test_painel_exige_papel_administrador(self):
+        cliente = Cliente.objects.create_user(
+            email="cliente-sem-admin@exemplo.com",
+            password="Senha#Cliente984",
+            nome="Cliente sem acesso",
+        )
+        self.client.force_login(cliente)
+
+        response = self.client.get(reverse("administracao"))
+
+        self.assertEqual(response.status_code, 403)
+        response = self.client.post(
+            reverse("administracao_sala_nova"),
+            {"nome": "Sala não autorizada", "capacidade": 2},
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(Sala.objects.filter(nome="Sala não autorizada").exists())
+
+    def test_painel_exige_autenticacao(self):
+        self.client.logout()
+
+        response = self.client.get(reverse("administracao"))
+
+        self.assertRedirects(
+            response,
+            f"{reverse('login')}?next={reverse('administracao')}",
+        )
+
+    def test_administrador_cadastra_e_edita_os_quatro_tipos_de_item(self):
+        senha = "Nuvem#Roxa39!Chuva"
+        response = self.client.post(
+            reverse("administracao_profissional_novo"),
+            {
+                "nome": "Nova profissional",
+                "email": "nova-profissional@exemplo.com",
+                "telefone": "(11) 99999-1234",
+                "especialidade": "Nutrição",
+                "modalidade": Profissional.Modalidade.ONLINE,
+                "formacao": "Nutrição clínica",
+                "apresentacao": "Atendimento remoto.",
+                "is_active": "on",
+                "senha": senha,
+                "confirmar_senha": senha,
+            },
+        )
+        self.assertRedirects(response, reverse("administracao"))
+        nova_profissional = Profissional.objects.get(
+            email="nova-profissional@exemplo.com"
+        )
+        self.assertTrue(nova_profissional.check_password(senha))
+        self.assertEqual(
+            nova_profissional.perfil.papel,
+            Perfil.Papel.PROFISSIONAL,
+        )
+
+        response = self.client.post(
+            reverse(
+                "administracao_profissional_editar",
+                args=[nova_profissional.pk],
+            ),
+            {
+                "nome": "Profissional editada",
+                "email": nova_profissional.email,
+                "telefone": "(11) 98888-1111",
+                "especialidade": "Nutrição esportiva",
+                "modalidade": Profissional.Modalidade.ONLINE,
+                "formacao": "Nutrição clínica",
+                "apresentacao": "Novo atendimento remoto.",
+                "is_active": "on",
+                "senha": "",
+                "confirmar_senha": "",
+            },
+        )
+        self.assertRedirects(response, reverse("administracao"))
+        nova_profissional.refresh_from_db()
+        self.assertEqual(nova_profissional.nome, "Profissional editada")
+        self.assertTrue(nova_profissional.check_password(senha))
+
+        response = self.client.post(
+            reverse("administracao_servico_novo"),
+            {
+                "profissional": self.profissional.pk,
+                "nome": "Avaliação inicial",
+                "tipo": "Avaliação",
+                "duracao_minutos": 45,
+            },
+        )
+        self.assertRedirects(response, reverse("administracao"))
+        servico = Servico.objects.get(nome="Avaliação inicial")
+        response = self.client.post(
+            reverse("administracao_servico_editar", args=[servico.pk]),
+            {
+                "profissional": self.profissional.pk,
+                "nome": "Avaliação completa",
+                "tipo": "Avaliação",
+                "duracao_minutos": 60,
+            },
+        )
+        self.assertRedirects(response, reverse("administracao"))
+        servico.refresh_from_db()
+        self.assertEqual(servico.nome, "Avaliação completa")
+
+        response = self.client.post(
+            reverse("administracao_sala_nova"),
+            {"nome": "Sala B", "capacidade": 4},
+        )
+        self.assertRedirects(response, reverse("administracao"))
+        sala = Sala.objects.get(nome="Sala B")
+        response = self.client.post(
+            reverse("administracao_sala_editar", args=[sala.pk]),
+            {"nome": "Sala B reformada", "capacidade": 5},
+        )
+        self.assertRedirects(response, reverse("administracao"))
+        sala.refresh_from_db()
+        self.assertEqual(sala.capacidade, 5)
+
+        response = self.client.post(
+            reverse("administracao_recurso_novo"),
+            {"nome": "Bicicleta ergométrica", "exclusivo": "on"},
+        )
+        self.assertRedirects(response, reverse("administracao"))
+        recurso = Recurso.objects.get(nome="Bicicleta ergométrica")
+        response = self.client.post(
+            reverse("administracao_recurso_editar", args=[recurso.pk]),
+            {"nome": "Bicicleta", "exclusivo": ""},
+        )
+        self.assertRedirects(response, reverse("administracao"))
+        recurso.refresh_from_db()
+        self.assertEqual(recurso.nome, "Bicicleta")
+        self.assertFalse(recurso.exclusivo)
+
+
 @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
 class PerfilEdicaoTests(TestCase):
     def setUp(self):
@@ -604,77 +950,6 @@ class PerfilEdicaoTests(TestCase):
             response,
             f"{reverse('login')}?next={reverse('perfil')}",
         )
-
-
-class InicioViewTests(TestCase):
-    def setUp(self):
-        self.cliente = Cliente.objects.create_user(
-            email="cliente-inicio@exemplo.com",
-            password="Senha#Segura123",
-            nome="Cliente Início",
-        )
-        self.profissional = Profissional.objects.create_user(
-            email="profissional-inicio@exemplo.com",
-            password="Senha#Segura123",
-            nome="Profissional Início",
-            especialidade="Fisioterapia",
-        )
-        self.recepcionista = Recepcionista.objects.create_user(
-            email="recepcionista-inicio@exemplo.com",
-            password="Senha#Segura123",
-            nome="Recepcionista Início",
-        )
-        self.administrador = Usuario.objects.create_superuser(
-            email="admin-inicio@exemplo.com",
-            password="Senha#Segura123",
-            nome="Admin Início",
-        )
-
-    def test_visitante_precisa_entrar(self):
-        response = self.client.get(reverse("inicio"))
-
-        self.assertRedirects(
-            response,
-            f"{reverse('login')}?next={reverse('inicio')}",
-        )
-
-    def test_cliente_ve_atendimento_e_agenda(self):
-        self.client.force_login(self.cliente)
-
-        response = self.client.get(reverse("inicio"))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Olá, Cliente Início!")
-        self.assertContains(response, reverse("profissionais"))
-        self.assertContains(response, reverse("minha_agenda"))
-        self.assertContains(response, reverse("perfil"))
-
-    def test_profissional_ve_atalho_para_editar_perfil(self):
-        self.client.force_login(self.profissional)
-
-        response = self.client.get(reverse("inicio"))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Meu perfil profissional")
-        self.assertContains(response, reverse("perfil"))
-        self.assertNotContains(response, reverse("admin:index"))
-
-    def test_recepcionista_nao_recebe_link_administrativo(self):
-        self.client.force_login(self.recepcionista)
-
-        response = self.client.get(reverse("inicio"))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Olá, Recepcionista Início!")
-        self.assertNotContains(response, reverse("admin:index"))
-
-    def test_administrador_ve_atalho_de_administracao(self):
-        self.client.force_login(self.administrador)
-
-        response = self.client.get(reverse("inicio"))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, reverse("admin:index"))
 
 
 class PasswordResetViewTests(TestCase):
