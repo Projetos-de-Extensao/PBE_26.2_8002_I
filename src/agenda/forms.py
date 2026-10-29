@@ -86,6 +86,14 @@ class AgendamentoForm(forms.ModelForm):
 
         return cleaned_data
 
+    def _post_clean(self):
+        # Em agendamentos recorrentes, a validação de conflitos e disponibilidade
+        # é feita individualmente para cada ocorrência da série (RN11, RN12)
+        # através de Recorrencia, e não na instância pontual do formulário.
+        if self.cleaned_data.get("repetir_semanal"):
+            return
+        super()._post_clean()
+
 
 class RecorrenciaForm(forms.ModelForm):
     """Formulário para configuração direta de agendamento recorrente (RF16)."""

@@ -512,6 +512,13 @@ class RecorrenciaModelTests(TestCase):
         )
         self.sala = Sala.objects.create(nome="EstÃºdio A")
         self.recurso = Recurso.objects.create(nome="Kettlebell")
+        for dia in range(7):
+            Disponibilidade.objects.create(
+                profissional=self.prof,
+                dia_semana=dia,
+                hora_inicio=time(8),
+                hora_fim=time(18),
+            )
 
     def test_str_e_atributos_basicos(self):
         rec = Recorrencia.objects.create(
