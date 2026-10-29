@@ -11,7 +11,21 @@ Descreva o seu projeto em linhas gerais.
  os pré-requisitos para rodar o seu projeto são UX, Engenharia de Dados, POO.
 
 
-## Como rodar
+## Como rodar (jeito rápido)
+
+Com o Python instalado, na pasta do projeto:
+
+```bash
+python iniciar.py
+```
+
+O script cria o ambiente virtual, instala o Django, prepara o banco, carrega os dados de
+exemplo, cria o acesso de demonstração (usuário `admin`, senha `admin`), sobe o servidor e
+abre o navegador. Funciona em Windows, macOS e Linux. Para parar, `Ctrl+C`.
+
+> O acesso `admin`/`admin` existe só para demonstração local e não deve ir para produção.
+
+## Como rodar (passo a passo)
 
 ```bash
 python -m venv .venv
