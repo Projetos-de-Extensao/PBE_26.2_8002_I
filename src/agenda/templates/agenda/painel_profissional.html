@@ -1,0 +1,51 @@
+{% extends "agenda/base.html" %}
+
+{% block title %}Painel do profissional{% endblock %}
+
+{% block conteudo %}
+<h1>Painel do Profissional</h1>
+<p>Nome: {{ profissional }}</p>
+
+<p>
+  <a href="{% url 'agenda:disponibilidade_bloqueio' %}">Definir disponibilidade</a>
+  &nbsp;|&nbsp;
+  <button type="button" onclick="document.getElementById('modal-bloqueio').showModal()">Bloquear horário</button>
+</p>
+
+<h2>Agenda do dia</h2>
+<p>
+  <a href="?dia={{ dia_anterior|date:'Y-m-d' }}">&larr; dia anterior</a>
+  &mdash; <strong>{{ dia|date:"d/m/Y" }}</strong> &mdash;
+  <a href="?dia={{ dia_seguinte|date:'Y-m-d' }}">dia seguinte &rarr;</a>
+</p>
+
+{% if agendamentos %}
+<table>
+  <tr><th>Horário</th><th>Serviço</th><th>Cliente</th><th>Status</th></tr>
+  {% for agendamento in agendamentos %}
+  <tr>
+    <td>{{ agendamento.hora_inicio|time:"H:i" }} - {{ agendamento.hora_fim|time:"H:i" }}</td>
+    <td>{{ agendamento.servico }}</td>
+    <td>{{ agendamento.cliente }}</td>
+    <td>{{ agendamento.get_status_display }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p>Nenhum atendimento neste dia.</p>
+{% endif %}
+
+<dialog id="modal-bloqueio">
+  <form method="post" action="{% url 'agenda:criar_bloqueio' %}">
+    {% csrf_token %}
+    <input type="hidden" name="origem" value="{% url 'agenda:painel_profissional' %}?dia={{ dia|date:'Y-m-d' }}">
+    <h2>Bloquear horário</h2>
+    <div class="campo">{{ bloqueio_form.data.label_tag }}{{ bloqueio_form.data }}</div>
+    <div class="campo">{{ bloqueio_form.hora_inicio.label_tag }}{{ bloqueio_form.hora_inicio }}</div>
+    <div class="campo">{{ bloqueio_form.hora_fim.label_tag }}{{ bloqueio_form.hora_fim }}</div>
+    <div class="campo">{{ bloqueio_form.motivo.label_tag }}{{ bloqueio_form.motivo }}</div>
+    <button type="submit">Salvar</button>
+    <button type="button" onclick="document.getElementById('modal-bloqueio').close()">Cancelar</button>
+  </form>
+</dialog>
+{% endblock %}
