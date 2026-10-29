@@ -7,7 +7,13 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
 from .forms import AgendamentoForm, BloqueioForm, DisponibilidadeForm
-from .models import Agendamento, Bloqueio, Disponibilidade, Profissional
+from .models import (
+    Agendamento,
+    Bloqueio,
+    Disponibilidade,
+    Profissional,
+    horarios_livres,
+)
 
 
 @login_required
@@ -133,9 +139,37 @@ def criar_bloqueio(request):
     return redirect(destino)
 
 
+def _sugestoes_de_horario(dados):
+    """Horários livres do profissional no mesmo dia, para oferecer ao cliente
+    quando o horário escolhido der conflito (RF26)."""
+    profissional = dados.get("profissional")
+    data = dados.get("data")
+    servico = dados.get("servico")
+    if profissional is None or data is None:
+        return []
+    duracao = servico.duracao_minutos if servico else 30
+    livres = horarios_livres(profissional, data, duracao)
+    return [hora for hora in livres if hora != dados.get("hora_inicio")][:6]
+
+
+def _mensagens_de_conflito(form):
+    """Erros de validação que impedem a reserva do horário escolhido."""
+    mensagens = list(form.non_field_errors())
+    for campo in ("sala", "recurso"):
+        mensagens += list(form.errors.get(campo, []))
+    return mensagens
+
+
 @login_required
 def novo_agendamento(request):
-    """Tela de criação de agendamento (RF10)."""
+    """Tela de criação de agendamento (RF10).
+
+    Quando a validação recusa o horário, a tela reabre com o motivo do
+    conflito e sugestões de horários livres no mesmo dia (RF26).
+    """
+    conflito = None
+    sugestoes = []
+
     if request.method == "POST":
         form = AgendamentoForm(request.POST)
         if form.is_valid():
@@ -144,12 +178,20 @@ def novo_agendamento(request):
             try:
                 agendamento.save()
             except ValidationError as erro:
-                for mensagem in erro.messages:
-                    form.add_error(None, mensagem)
+                conflito = " ".join(erro.messages)
             else:
                 messages.success(request, "Agendamento criado com sucesso.")
                 return redirect("agenda:novo_agendamento")
+        else:
+            mensagens = _mensagens_de_conflito(form)
+            conflito = " ".join(mensagens) if mensagens else None
+        if conflito:
+            sugestoes = _sugestoes_de_horario(getattr(form, "cleaned_data", {}))
     else:
         form = AgendamentoForm()
 
-    return render(request, "agenda/novo_agendamento.html", {"form": form})
+    return render(
+        request,
+        "agenda/novo_agendamento.html",
+        {"form": form, "conflito": conflito, "sugestoes": sugestoes},
+    )

@@ -433,7 +433,7 @@ class NovoAgendamentoViewTests(TestCase):
         self.assertContains(resposta, 'id="modal-confirmacao"')
         self.assertContains(resposta, "Confirmar agendamento")
 
-    def test_mostra_erro_de_conflito(self):
+    def test_mostra_modal_de_conflito_com_sugestoes(self):
         self.client.login(username="cliente1", password="segredo")
         dados = {
             "servico": self.servico.pk,
@@ -445,4 +445,13 @@ class NovoAgendamentoViewTests(TestCase):
         resposta = self.client.post(self.url, dados)
         self.assertEqual(resposta.status_code, 200)
         self.assertContains(resposta, "já possui um agendamento")
+        self.assertContains(resposta, 'id="modal-conflito" data-abrir="1"')
         self.assertEqual(Agendamento.objects.count(), 1)
+        sugestoes = resposta.context["sugestoes"]
+        self.assertTrue(sugestoes)
+        self.assertNotIn(time(16), sugestoes)
+
+    def test_sem_conflito_o_modal_fica_fechado(self):
+        self.client.login(username="cliente1", password="segredo")
+        resposta = self.client.get(self.url)
+        self.assertNotContains(resposta, 'data-abrir="1"')
