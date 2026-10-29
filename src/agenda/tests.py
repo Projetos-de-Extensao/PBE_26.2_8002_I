@@ -455,3 +455,23 @@ class NovoAgendamentoViewTests(TestCase):
         self.client.login(username="cliente1", password="segredo")
         resposta = self.client.get(self.url)
         self.assertNotContains(resposta, 'data-abrir="1"')
+
+
+class FixtureExemploTests(TestCase):
+    """Garante que os dados de demonstração continuam carregando (#25)."""
+
+    fixtures = ["exemplo.json"]
+
+    def test_carrega_os_dados(self):
+        self.assertEqual(Sala.objects.count(), 3)
+        self.assertEqual(Recurso.objects.count(), 3)
+        self.assertEqual(Profissional.objects.count(), 3)
+        self.assertEqual(Servico.objects.count(), 4)
+        self.assertEqual(Disponibilidade.objects.count(), 7)
+        self.assertEqual(Bloqueio.objects.count(), 1)
+        self.assertEqual(Agendamento.objects.count(), 5)
+
+    def test_tem_agendamento_com_sala_e_recurso(self):
+        agendamento = Agendamento.objects.get(pk=3)
+        self.assertEqual(agendamento.sala.nome, "Sala de Pilates")
+        self.assertEqual(agendamento.recurso.nome, "Reformer")
