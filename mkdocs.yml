@@ -23,6 +23,7 @@ nav:
       - Diagrama de Classes: Elaboracao/diagrama_de_classes.md
       - Diagrama de Sequência: Elaboracao/diagrama_de_sequencia.md
       - Regras de Negócio: Elaboracao/regras-de-negocio.md
+      - Papéis e Permissões: Elaboracao/papeis-e-permissoes.md
       - Protótipos de Baixa Fidelidade:
           - Index: Elaboracao/prototipos_baixa_fidelidade_md/index.md
           - Login: Elaboracao/prototipos_baixa_fidelidade_md/01-login.md

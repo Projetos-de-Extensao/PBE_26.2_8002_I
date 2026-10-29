@@ -29,6 +29,7 @@ from agendamento.views import (
     CadastroView,
     LoginView,
     NovoAgendamentoView,
+    PerfilEdicaoView,
     ProfissionalDetailView,
     ProfissionalListView,
     CancelarAgendamentoView,
@@ -39,6 +40,7 @@ urlpatterns = [
     path("admin/", admin_site.urls),
     path("", LoginView.as_view(), name="login"),
     path("cadastrar/", CadastroView.as_view(), name="cadastro"),
+    path("perfil/", PerfilEdicaoView.as_view(), name="perfil"),
     path(
         "profissionais/",
         ProfissionalListView.as_view(),

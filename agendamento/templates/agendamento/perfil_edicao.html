@@ -1,0 +1,35 @@
+{% extends "agendamento/base.html" %}
+{% block title %}Editar perfil{% endblock %}
+{% block content %}
+  <div class="profile-backdrop" aria-hidden="true"></div>
+  <dialog class="profile-dialog" open aria-labelledby="profile-title">
+    <h1 id="profile-title">Editar perfil</h1>
+    <p>Altere seus dados pessoais{% if eh_profissional %} e profissionais{% endif %}.</p>
+    <form method="post">
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <div class="error" role="alert">{{ form.non_field_errors }}</div>
+      {% endif %}
+      {% for field in form %}
+        <div class="field">
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {% if field.errors %}
+            <div class="error" role="alert">{{ field.errors }}</div>
+          {% endif %}
+        </div>
+      {% endfor %}
+      <button type="submit">Salvar alterações</button>
+    </form>
+    <nav class="options" aria-label="Navegação do perfil">
+      <a href="{% url 'login' %}">Cancelar</a>
+    </nav>
+  </dialog>
+  <script>
+    const profileDialog = document.querySelector(".profile-dialog");
+    if (profileDialog.open && typeof profileDialog.showModal === "function") {
+      profileDialog.close();
+      profileDialog.showModal();
+    }
+  </script>
+{% endblock %}
