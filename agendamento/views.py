@@ -286,6 +286,52 @@ class CadastroView(FormView):
         return super().form_valid(form)
 
 
+class UsuarioPerfilForm(forms.ModelForm):
+    class Meta:
+        model = Usuario
+        fields = ("nome", "telefone")
+
+
+class ProfissionalPerfilForm(forms.ModelForm):
+    class Meta:
+        model = Profissional
+        fields = ("nome", "telefone", "especialidade", "apresentacao")
+        labels = {"apresentacao": _("Apresentação")}
+
+
+class PerfilEdicaoView(LoginRequiredMixin, View):
+    template_name = "agendamento/perfil_edicao.html"
+
+    def get_form(self, request, data=None):
+        if request.user.perfil.papel == Perfil.Papel.PROFISSIONAL:
+            profissional = get_object_or_404(Profissional, pk=request.user.pk)
+            return ProfissionalPerfilForm(data=data, instance=profissional)
+        return UsuarioPerfilForm(data=data, instance=request.user)
+
+    def render_form(self, request, form):
+        return render(
+            request,
+            self.template_name,
+            {
+                "form": form,
+                "eh_profissional": (
+                    request.user.perfil.papel == Perfil.Papel.PROFISSIONAL
+                ),
+            },
+        )
+
+    def get(self, request, *args, **kwargs):
+        return self.render_form(request, self.get_form(request))
+
+    def post(self, request, *args, **kwargs):
+        form = self.get_form(request, request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, _("Perfil atualizado com sucesso."))
+            return HttpResponseRedirect(reverse("login"))
+        return self.render_form(request, form)
+
+
 class ProfissionalListView(ListView):
     model = Profissional
     context_object_name = "profissionais"

@@ -186,8 +186,35 @@
         margin: 0;
       }
 
+      .profile-backdrop {
+        position: fixed;
+        z-index: 1;
+        inset: 0;
+        background: #17203380;
+      }
+
+      .profile-dialog[open] {
+        position: fixed;
+        z-index: 2;
+        inset: 0;
+        display: block;
+        width: min(calc(100% - 2rem), 36rem);
+        max-height: calc(100vh - 2rem);
+        margin: auto;
+        padding: 2rem;
+        overflow: auto;
+        border: 1px solid #e1e6ef;
+        border-radius: 1rem;
+        background: #fff;
+        box-shadow: 0 1rem 2.5rem #17203340;
+      }
+
       @media (max-width: 24rem) {
         main {
+          padding: 1.5rem;
+        }
+
+        .profile-dialog[open] {
           padding: 1.5rem;
         }
 

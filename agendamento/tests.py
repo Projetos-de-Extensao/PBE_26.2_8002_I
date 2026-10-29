@@ -397,6 +397,8 @@ class ControleAcessoTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertContains(response, "Acesso negado", status_code=403)
+        response = self.client.post(reverse("admin:agendamento_sala_add"), {})
+        self.assertEqual(response.status_code, 403)
 
     def test_recepcionista_nao_acessa_cadastros_administrativos(self):
         self.client.force_login(self.recepcionista)
@@ -411,6 +413,9 @@ class ControleAcessoTests(TestCase):
                 response = self.client.get(reverse(rota))
                 self.assertEqual(response.status_code, 403)
                 self.assertContains(response, "Acesso negado", status_code=403)
+
+        response = self.client.post(reverse("admin:agendamento_sala_add"), {})
+        self.assertEqual(response.status_code, 403)
 
     def test_administrador_pode_gerenciar_profissional_servico_e_sala(self):
         self.client.force_login(self.administrador)
@@ -515,6 +520,87 @@ class ControleAcessoTests(TestCase):
 
 
 @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+class PerfilEdicaoTests(TestCase):
+    def setUp(self):
+        self.cliente = Cliente.objects.create_user(
+            email="cliente-perfil@exemplo.com",
+            password="Senha#Segura123",
+            nome="Cliente",
+        )
+        self.profissional = Profissional.objects.create_user(
+            email="profissional-perfil@exemplo.com",
+            password="Senha#Segura123",
+            nome="Profissional",
+            especialidade="Fisioterapia",
+        )
+
+    def test_cliente_edita_apenas_nome_e_telefone(self):
+        self.client.force_login(self.cliente)
+
+        response = self.client.get(reverse("perfil"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Telefone")
+        self.assertNotContains(response, "Especialidade")
+
+        response = self.client.post(
+            reverse("perfil"),
+            {
+                "nome": "Cliente Atualizado",
+                "telefone": "(11) 99999-1234",
+                "papel": Perfil.Papel.ADMINISTRADOR,
+                "is_staff": "on",
+            },
+        )
+
+        self.assertRedirects(response, reverse("login"))
+        self.cliente.refresh_from_db()
+        self.assertEqual(self.cliente.nome, "Cliente Atualizado")
+        self.assertEqual(self.cliente.telefone, "(11) 99999-1234")
+        self.assertEqual(self.cliente.perfil.papel, Perfil.Papel.CLIENTE)
+        self.assertFalse(self.cliente.is_staff)
+
+    def test_profissional_edita_dados_profissionais(self):
+        self.client.force_login(self.profissional)
+
+        response = self.client.get(reverse("perfil"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Especialidade")
+        self.assertContains(response, "Apresentação")
+
+        response = self.client.post(
+            reverse("perfil"),
+            {
+                "nome": "Profissional Atualizada",
+                "telefone": "(21) 98888-4321",
+                "especialidade": "Fisioterapia esportiva",
+                "apresentacao": "Atendimento individualizado.",
+            },
+        )
+
+        self.assertRedirects(response, reverse("login"))
+        self.profissional.refresh_from_db()
+        self.assertEqual(self.profissional.nome, "Profissional Atualizada")
+        self.assertEqual(self.profissional.telefone, "(21) 98888-4321")
+        self.assertEqual(
+            self.profissional.especialidade,
+            "Fisioterapia esportiva",
+        )
+        self.assertEqual(
+            self.profissional.apresentacao,
+            "Atendimento individualizado.",
+        )
+
+    def test_usuario_anônimo_precisa_entrar(self):
+        response = self.client.get(reverse("perfil"))
+
+        self.assertRedirects(
+            response,
+            f"{reverse('login')}?next={reverse('perfil')}",
+        )
+
+
 class PasswordResetViewTests(TestCase):
     def setUp(self):
         papel = Papel.objects.create(nome="Cliente")
