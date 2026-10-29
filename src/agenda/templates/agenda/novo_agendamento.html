@@ -5,7 +5,7 @@
 {% block conteudo %}
 <h1>Novo agendamento</h1>
 
-{% if form.non_field_errors %}
+{% if form.non_field_errors and not conflito %}
   {% for erro in form.non_field_errors %}
     <div class="aviso erro">{{ erro }}</div>
   {% endfor %}
@@ -25,6 +25,25 @@
   <p class="ajuda">A hora de término é calculada pela duração do serviço.</p>
   <button type="submit">Agendar</button>
 </form>
+
+<dialog id="modal-conflito"{% if conflito %} data-abrir="1"{% endif %}>
+  <h2>Horário indisponível</h2>
+  <p class="aviso erro">{{ conflito }}</p>
+  {% if sugestoes %}
+    <p>Horários livres nesse dia:</p>
+    <p>
+      {% for hora in sugestoes %}
+        <button type="button" class="sugestao" data-hora="{{ hora|time:'H:i' }}">
+          {{ hora|time:"H:i" }}
+        </button>
+      {% endfor %}
+    </p>
+    <p class="ajuda">Clique em um horário para preencher o formulário.</p>
+  {% else %}
+    <p class="ajuda">Não há horário livre nesse dia. Tente outra data.</p>
+  {% endif %}
+  <p><button type="button" id="botao-fechar-conflito">Escolher outro horário</button></p>
+</dialog>
 
 <dialog id="modal-confirmacao">
   <h2>Confirmar agendamento</h2>
@@ -89,6 +108,29 @@
 
     document.getElementById("botao-voltar").addEventListener("click", function () {
       modal.close();
+    });
+  })();
+
+  // Modal de conflito: motivo da recusa e sugestões de horário (#23).
+  (function () {
+    const modal = document.getElementById("modal-conflito");
+    if (!modal || typeof modal.showModal !== "function") {
+      return;
+    }
+    if (modal.dataset.abrir === "1") {
+      modal.showModal();
+    }
+    document.getElementById("botao-fechar-conflito").addEventListener("click", function () {
+      modal.close();
+    });
+    modal.querySelectorAll(".sugestao").forEach(function (botao) {
+      botao.addEventListener("click", function () {
+        const campo = document.getElementById("id_hora_inicio");
+        if (campo) {
+          campo.value = botao.dataset.hora;
+        }
+        modal.close();
+      });
     });
   })();
 </script>
