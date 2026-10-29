@@ -916,3 +916,122 @@ class NovoAgendamentoRecorrenciaViewTests(TestCase):
         self.assertEqual(resposta.status_code, 200)
         self.assertEqual(Recorrencia.objects.count(), 0)
         self.assertContains(resposta, "apresentaram conflito")
+
+
+class PreviaRecorrenciaViewTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.cliente = User.objects.create_user("cliente_prev", password="123")
+        self.cliente2 = User.objects.create_user("cliente_prev2", password="123")
+        self.prof = Profissional.objects.create(
+            usuario=User.objects.create_user("prof_prev", password="x"),
+            especialidade="PERSONAL",
+        )
+        for dia in range(5):
+            Disponibilidade.objects.create(
+                profissional=self.prof,
+                dia_semana=dia,
+                hora_inicio=time(8),
+                hora_fim=time(18),
+            )
+        self.servico = Servico.objects.create(
+            profissional=self.prof, nome="Treino", duracao_minutos=60
+        )
+        self.url = reverse("agenda:previa_recorrencia")
+
+    def test_exige_login(self):
+        resposta = self.client.post(self.url, {})
+        self.assertEqual(resposta.status_code, 302)
+
+    def test_metodo_get_recusado(self):
+        self.client.login(username="cliente_prev", password="123")
+        resposta = self.client.get(self.url)
+        self.assertEqual(resposta.status_code, 405)
+
+    def test_previa_dados_invalidos_retorna_400(self):
+        self.client.login(username="cliente_prev", password="123")
+        resposta = self.client.post(self.url, {
+            "servico": self.servico.pk,
+            # Faltam profissional, data, etc.
+        })
+        self.assertEqual(resposta.status_code, 400)
+        dados = resposta.json()
+        self.assertFalse(dados["valido"])
+
+    def test_previa_data_fim_anterior_retorna_400(self):
+        self.client.login(username="cliente_prev", password="123")
+        resposta = self.client.post(self.url, {
+            "servico": self.servico.pk,
+            "profissional": self.prof.pk,
+            "data": "2026-11-16",
+            "data_fim": "2026-11-02",
+            "hora_inicio": "10:00",
+        })
+        self.assertEqual(resposta.status_code, 400)
+        dados = resposta.json()
+        self.assertFalse(dados["valido"])
+        self.assertIn("A data final deve ser posterior", dados["erro"])
+
+    def test_previa_calcula_datas_e_total_sessoes(self):
+        self.client.login(username="cliente_prev", password="123")
+        resposta = self.client.post(self.url, {
+            "servico": self.servico.pk,
+            "profissional": self.prof.pk,
+            "data": "2026-11-02",  # Seg
+            "data_fim": "2026-11-16",  # Seg (3 segundas: 02, 09, 16)
+            "hora_inicio": "10:00",
+            "dias_semana": ["0"],
+        })
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["valido"])
+        self.assertEqual(dados["total"], 3)
+        self.assertEqual(dados["total_validas"], 3)
+        self.assertEqual(dados["total_conflitos"], 0)
+        self.assertEqual(len(dados["sessoes"]), 3)
+        for s in dados["sessoes"]:
+            self.assertFalse(s["conflito"])
+            self.assertEqual(s["status"], "Disponível")
+
+    def test_previa_identifica_conflito_com_motivo(self):
+        # Cria conflito no dia 2026-11-09 às 10:00
+        Agendamento.objects.create(
+            cliente=self.cliente2,
+            profissional=self.prof,
+            servico=self.servico,
+            data=date(2026, 11, 9),
+            hora_inicio=time(10),
+            hora_fim=time(11),
+        )
+        self.client.login(username="cliente_prev", password="123")
+        resposta = self.client.post(self.url, {
+            "servico": self.servico.pk,
+            "profissional": self.prof.pk,
+            "data": "2026-11-02",
+            "data_fim": "2026-11-16",
+            "hora_inicio": "10:00",
+            "dias_semana": ["0"],
+        })
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["valido"])
+        self.assertEqual(dados["total"], 3)
+        self.assertEqual(dados["total_validas"], 2)
+        self.assertEqual(dados["total_conflitos"], 1)
+
+        # Encontra a sessão do dia 09
+        s_09 = [s for s in dados["sessoes"] if s["data"] == "2026-11-09"][0]
+        self.assertTrue(s_09["conflito"])
+        self.assertEqual(s_09["status"], "Conflito")
+        self.assertIn("já possui um agendamento", s_09["motivo"])
+
+    def test_template_contem_modal_recorrencia_e_elementos(self):
+        self.client.login(username="cliente_prev", password="123")
+        resposta = self.client.get(reverse("agenda:novo_agendamento"))
+        self.assertContains(resposta, 'id="modal-recorrencia"')
+        self.assertContains(resposta, 'id="metrica-total"')
+        self.assertContains(resposta, 'id="metrica-validas"')
+        self.assertContains(resposta, 'id="metrica-conflitos"')
+        self.assertContains(resposta, 'id="tabela-sessoes-recorrencia"')
+        self.assertContains(resposta, 'id="botao-confirmar-recorrencia"')
+        self.assertContains(resposta, 'id="botao-ver-previa"')
