@@ -80,7 +80,7 @@ Representar os conceitos do domínio de agendamento multidisciplinar, suas respo
 
 **Bloqueio**
 - Descrição: período em que o profissional torna-se indisponível.
-- Atributos de domínio: início, fim, motivo.
+- Atributos de domínio: data, horário de início, horário de fim, motivo.
 - Relacionamentos: um Bloqueio pertence a 1 Profissional.
 - Restrições de negócio: RN13.
 
@@ -240,9 +240,11 @@ class Disponibilidade <<entity>> {
 
 class Bloqueio <<entity>> {
   - id: Long
-  - inicio: DateTime
-  - fim: DateTime
+  - data: Date
+  - horaInicio: Time
+  - horaFim: Time
   - motivo: String
+  + agendamentosAfetados(): List<Agendamento>
 }
 
 class Agendamento <<entity>> {
@@ -339,6 +341,7 @@ Agendamento --> StatusAgendamento : possui
 | Versão | Data | Autor(es) | Revisor(es) | Resumo da alteração |
 |---|---|---|---|---|
 | v0.1 | 17/09/2026 | Equipe do projeto | — | Criação do diagrama de classes conceitual e de especificação a partir do roteiro e dos casos de uso |
+| v0.2 | 28/10/2026 | Miguel Esteves | — | Atributos de `Bloqueio` alinhados ao model implementado (`data`, `horaInicio`, `horaFim`, `motivo`) e inclusão da operação `agendamentosAfetados()` |
 
 ## 5) Entregáveis
 

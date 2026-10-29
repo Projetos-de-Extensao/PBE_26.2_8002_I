@@ -1,0 +1,80 @@
+{% extends "agenda/base.html" %}
+
+{% block title %}Disponibilidade e bloqueios{% endblock %}
+
+{% block conteudo %}
+<h1>Disponibilidade e Bloqueios</h1>
+
+<fieldset>
+  <legend>Nova faixa de disponibilidade</legend>
+  <form method="post">
+    {% csrf_token %}
+    <div class="campo">{{ disponibilidade_form.dia_semana.label_tag }}{{ disponibilidade_form.dia_semana }}</div>
+    <div class="campo">{{ disponibilidade_form.hora_inicio.label_tag }}{{ disponibilidade_form.hora_inicio }}</div>
+    <div class="campo">{{ disponibilidade_form.hora_fim.label_tag }}{{ disponibilidade_form.hora_fim }}</div>
+    {% if disponibilidade_form.non_field_errors %}
+      <p class="erro">{{ disponibilidade_form.non_field_errors }}</p>
+    {% endif %}
+    <button type="submit" name="salvar_disponibilidade" value="1">Salvar disponibilidade</button>
+  </form>
+</fieldset>
+
+{% if faixas %}
+<table>
+  <tr><th>Dia</th><th>Início</th><th>Fim</th><th></th></tr>
+  {% for faixa in faixas %}
+  <tr>
+    <td>{{ faixa.get_dia_semana_display }}</td>
+    <td>{{ faixa.hora_inicio|time:"H:i" }}</td>
+    <td>{{ faixa.hora_fim|time:"H:i" }}</td>
+    <td class="acoes">
+      <form method="post" action="{% url 'agenda:remover_disponibilidade' faixa.pk %}">
+        {% csrf_token %}
+        <button type="submit">Remover</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p>Nenhuma faixa cadastrada.</p>
+{% endif %}
+
+<fieldset>
+  <legend>Novo bloqueio</legend>
+  <form method="post" action="{% url 'agenda:criar_bloqueio' %}">
+    {% csrf_token %}
+    <input type="hidden" name="origem" value="{% url 'agenda:disponibilidade_bloqueio' %}">
+    <div class="campo">{{ bloqueio_form.data.label_tag }}{{ bloqueio_form.data }}</div>
+    <div class="campo">{{ bloqueio_form.hora_inicio.label_tag }}{{ bloqueio_form.hora_inicio }}</div>
+    <div class="campo">{{ bloqueio_form.hora_fim.label_tag }}{{ bloqueio_form.hora_fim }}</div>
+    <div class="campo">{{ bloqueio_form.motivo.label_tag }}{{ bloqueio_form.motivo }}</div>
+    {% if bloqueio_form.non_field_errors %}
+      <p class="erro">{{ bloqueio_form.non_field_errors }}</p>
+    {% endif %}
+    <button type="submit">Salvar bloqueio</button>
+  </form>
+</fieldset>
+
+{% if bloqueios %}
+<table>
+  <tr><th>Data</th><th>Início</th><th>Fim</th><th>Motivo</th><th></th></tr>
+  {% for bloqueio in bloqueios %}
+  <tr>
+    <td>{{ bloqueio.data|date:"d/m/Y" }}</td>
+    <td>{{ bloqueio.hora_inicio|time:"H:i" }}</td>
+    <td>{{ bloqueio.hora_fim|time:"H:i" }}</td>
+    <td>{{ bloqueio.motivo }}</td>
+    <td class="acoes">
+      <form method="post" action="{% url 'agenda:remover_bloqueio' bloqueio.pk %}">
+        {% csrf_token %}
+        <button type="submit">Remover</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p>Nenhum bloqueio cadastrado.</p>
+{% endif %}
+{% endblock %}
