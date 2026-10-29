@@ -469,11 +469,11 @@ class Recorrencia(models.Model):
         super().clean()
         if isinstance(self.dias_semana, str):
             if self.dias_semana.strip():
-                self.dias_semana = [
+                self.dias_semana = sorted(list({
                     int(d.strip())
                     for d in self.dias_semana.split(",")
                     if d.strip().isdigit()
-                ]
+                }))
             else:
                 self.dias_semana = []
         elif isinstance(self.dias_semana, (list, tuple, set)):
