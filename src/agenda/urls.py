@@ -6,6 +6,11 @@ app_name = "agenda"
 
 urlpatterns = [
     path("agendamentos/novo/", views.novo_agendamento, name="novo_agendamento"),
+    path(
+        "agendamentos/previa-recorrencia/",
+        views.previa_recorrencia,
+        name="previa_recorrencia",
+    ),
     path("painel/", views.painel_profissional, name="painel_profissional"),
     path(
         "disponibilidade-bloqueio/",
