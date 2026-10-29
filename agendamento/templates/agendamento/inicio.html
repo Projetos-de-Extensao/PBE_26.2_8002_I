@@ -1,0 +1,59 @@
+{% extends "agendamento/base.html" %}
+{% block title %}Página inicial{% endblock %}
+{% block main_class %}wide{% endblock %}
+{% block content %}
+  <h1>Olá, {{ user.nome }}!</h1>
+  <p>Você entrou como <strong>{{ papel }}</strong>. O que deseja fazer?</p>
+  <p class="muted">{{ user.email }}</p>
+
+  <section class="cards" aria-label="Atalhos">
+    {% if eh_cliente %}
+      <article class="card">
+        <h2>Encontrar profissional</h2>
+        <p>Pesquise por especialidade, serviço ou modalidade e escolha um horário.</p>
+        <a class="button-link" href="{% url 'profissionais' %}">Buscar profissionais</a>
+      </article>
+      <article class="card">
+        <h2>Minha agenda</h2>
+        <p>Consulte seus atendimentos e gerencie seus agendamentos.</p>
+        <a class="button-link" href="{% url 'minha_agenda' %}">Abrir minha agenda</a>
+      </article>
+    {% elif pode_administrar %}
+      <article class="card">
+        <h2>Administração</h2>
+        <p>Gerencie usuários, profissionais, serviços e salas.</p>
+        <a class="button-link" href="{% url 'admin:index' %}">Acessar administração</a>
+      </article>
+    {% elif user.perfil.papel == "profissional" %}
+      <article class="card">
+        <h2>Meu perfil profissional</h2>
+        <p>Mantenha seus dados de apresentação atualizados.</p>
+        <a class="button-link" href="{% url 'perfil' %}">Editar meu perfil</a>
+      </article>
+      <article class="card">
+        <h2>Profissionais</h2>
+        <p>Consulte os perfis públicos disponíveis na plataforma.</p>
+        <a class="button-link" href="{% url 'profissionais' %}">Ver profissionais</a>
+      </article>
+    {% else %}
+      <article class="card">
+        <h2>Seu perfil</h2>
+        <p>Atualize seu nome e telefone de contato.</p>
+        <a class="button-link" href="{% url 'perfil' %}">Editar meu perfil</a>
+      </article>
+    {% endif %}
+
+    {% if not pode_administrar and user.perfil.papel != "profissional" %}
+      <article class="card">
+        <h2>Meus dados</h2>
+        <p>Revise ou atualize as informações do seu perfil.</p>
+        <a class="button-link" href="{% url 'perfil' %}">Editar perfil</a>
+      </article>
+    {% endif %}
+  </section>
+
+  <form method="post" action="{% url 'logout' %}">
+    {% csrf_token %}
+    <button type="submit">Sair da conta</button>
+  </form>
+{% endblock %}

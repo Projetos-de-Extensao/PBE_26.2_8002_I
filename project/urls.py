@@ -27,6 +27,7 @@ from django.urls import path, reverse_lazy
 from agendamento.views import (
     AgendaClienteView,
     CadastroView,
+    InicioView,
     LoginView,
     NovoAgendamentoView,
     PerfilEdicaoView,
@@ -39,6 +40,7 @@ from agendamento.admin_site import admin_site
 urlpatterns = [
     path("admin/", admin_site.urls),
     path("", LoginView.as_view(), name="login"),
+    path("inicio/", InicioView.as_view(), name="inicio"),
     path("cadastrar/", CadastroView.as_view(), name="cadastro"),
     path("perfil/", PerfilEdicaoView.as_view(), name="perfil"),
     path(

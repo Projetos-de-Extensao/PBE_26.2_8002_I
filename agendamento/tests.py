@@ -58,9 +58,9 @@ class LoginViewTests(TestCase):
             },
         )
 
-        self.assertRedirects(response, reverse("login"))
-        response = self.client.get(reverse("login"))
-        self.assertContains(response, "Acesso realizado")
+        self.assertRedirects(response, reverse("inicio"))
+        response = self.client.get(reverse("inicio"))
+        self.assertContains(response, "Olá, Cliente!")
         self.assertContains(response, self.usuario.email)
 
     def test_permite_encerrar_sessao(self):
@@ -105,6 +105,11 @@ class CadastroViewTests(TestCase):
         self.assertTrue(Cliente.objects.filter(pk=usuario.pk).exists())
         self.assertTrue(usuario.check_password("Nuvem#Roxa39!Chuva"))
         self.assertContains(response, "Conta criada com sucesso")
+        self.assertContains(response, "Olá, Nova Cliente!")
+        self.assertEqual(
+            self.client.session["_auth_user_id"],
+            str(usuario.pk),
+        )
 
     def test_rejeita_email_duplicado(self):
         papel = Papel.objects.create(nome="Cliente")
@@ -553,7 +558,7 @@ class PerfilEdicaoTests(TestCase):
             },
         )
 
-        self.assertRedirects(response, reverse("login"))
+        self.assertRedirects(response, reverse("inicio"))
         self.cliente.refresh_from_db()
         self.assertEqual(self.cliente.nome, "Cliente Atualizado")
         self.assertEqual(self.cliente.telefone, "(11) 99999-1234")
@@ -579,7 +584,7 @@ class PerfilEdicaoTests(TestCase):
             },
         )
 
-        self.assertRedirects(response, reverse("login"))
+        self.assertRedirects(response, reverse("inicio"))
         self.profissional.refresh_from_db()
         self.assertEqual(self.profissional.nome, "Profissional Atualizada")
         self.assertEqual(self.profissional.telefone, "(21) 98888-4321")
@@ -599,6 +604,77 @@ class PerfilEdicaoTests(TestCase):
             response,
             f"{reverse('login')}?next={reverse('perfil')}",
         )
+
+
+class InicioViewTests(TestCase):
+    def setUp(self):
+        self.cliente = Cliente.objects.create_user(
+            email="cliente-inicio@exemplo.com",
+            password="Senha#Segura123",
+            nome="Cliente Início",
+        )
+        self.profissional = Profissional.objects.create_user(
+            email="profissional-inicio@exemplo.com",
+            password="Senha#Segura123",
+            nome="Profissional Início",
+            especialidade="Fisioterapia",
+        )
+        self.recepcionista = Recepcionista.objects.create_user(
+            email="recepcionista-inicio@exemplo.com",
+            password="Senha#Segura123",
+            nome="Recepcionista Início",
+        )
+        self.administrador = Usuario.objects.create_superuser(
+            email="admin-inicio@exemplo.com",
+            password="Senha#Segura123",
+            nome="Admin Início",
+        )
+
+    def test_visitante_precisa_entrar(self):
+        response = self.client.get(reverse("inicio"))
+
+        self.assertRedirects(
+            response,
+            f"{reverse('login')}?next={reverse('inicio')}",
+        )
+
+    def test_cliente_ve_atendimento_e_agenda(self):
+        self.client.force_login(self.cliente)
+
+        response = self.client.get(reverse("inicio"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Olá, Cliente Início!")
+        self.assertContains(response, reverse("profissionais"))
+        self.assertContains(response, reverse("minha_agenda"))
+        self.assertContains(response, reverse("perfil"))
+
+    def test_profissional_ve_atalho_para_editar_perfil(self):
+        self.client.force_login(self.profissional)
+
+        response = self.client.get(reverse("inicio"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Meu perfil profissional")
+        self.assertContains(response, reverse("perfil"))
+        self.assertNotContains(response, reverse("admin:index"))
+
+    def test_recepcionista_nao_recebe_link_administrativo(self):
+        self.client.force_login(self.recepcionista)
+
+        response = self.client.get(reverse("inicio"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Olá, Recepcionista Início!")
+        self.assertNotContains(response, reverse("admin:index"))
+
+    def test_administrador_ve_atalho_de_administracao(self):
+        self.client.force_login(self.administrador)
+
+        response = self.client.get(reverse("inicio"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("admin:index"))
 
 
 class PasswordResetViewTests(TestCase):
