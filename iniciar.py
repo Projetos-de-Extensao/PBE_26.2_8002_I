@@ -106,15 +106,22 @@ def carregar_exemplo(python):
 
 
 def criar_acesso_demo(python):
-    """Cria um superusuário local caso ainda não exista nenhum."""
+    """Cria o acesso de demonstração e liga ele a um perfil de profissional."""
     script = (
         "import django, os;"
         "os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings');"
         "django.setup();"
         "from django.contrib.auth import get_user_model;"
+        "from agenda.models import Profissional;"
         "U = get_user_model();"
-        "existe = U.objects.filter(is_superuser=True).exists();"
-        "U.objects.create_superuser('{usuario}', '', '{senha}') if not existe else None;"
+        "existe = U.objects.filter(username='{usuario}').exists();"
+        "u = U.objects.get(username='{usuario}') if existe"
+        " else U.objects.create_superuser('{usuario}', '', '{senha}');"
+        # O admin também vira profissional para que o painel e a tela de
+        # disponibilidade funcionem na demonstração.
+        "Profissional.objects.get_or_create("
+        "usuario=u, defaults={{'especialidade': 'PERSONAL',"
+        " 'descricao': 'Perfil de demonstração.'}});"
         "print('criado' if not existe else 'ja_existe')"
     ).format(usuario=USUARIO_DEMO, senha=SENHA_DEMO)
     resultado = subprocess.run(
