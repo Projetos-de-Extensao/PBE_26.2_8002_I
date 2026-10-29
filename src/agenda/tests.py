@@ -135,6 +135,29 @@ class AgendamentoTests(TestCase):
         self.assertIsNotNone(ag.criado_em)
         self.assertEqual(str(ag), "cliente1 - prof1 - Nutricionista - 2026-11-03 09:00:00")
 
+    def test_hora_fim_calculada_pelo_servico(self):
+        ag = Agendamento.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            data=date(2026, 11, 3),
+            hora_inicio=time(16),
+        )
+        self.assertEqual(ag.hora_fim, time(17))
+
+    def test_hora_fim_informada_prevalece(self):
+        ag = self.criar(inicio=time(16), fim=time(16, 30))
+        self.assertEqual(ag.hora_fim, time(16, 30))
+
+    def test_sem_servico_e_sem_hora_fim_da_erro(self):
+        with self.assertRaises(ValidationError):
+            Agendamento.objects.create(
+                cliente=self.cliente,
+                profissional=self.prof,
+                data=date(2026, 11, 3),
+                hora_inicio=time(16),
+            )
+
     def test_hora_fim_deve_ser_posterior(self):
         with self.assertRaises(ValidationError):
             self.criar(inicio=time(10), fim=time(10))

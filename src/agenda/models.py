@@ -1,3 +1,5 @@
+from datetime import date, datetime, timedelta
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
@@ -173,7 +175,7 @@ class Agendamento(models.Model):
     )
     data = models.DateField("data")
     hora_inicio = models.TimeField("hora de início")
-    hora_fim = models.TimeField("hora de término")
+    hora_fim = models.TimeField("hora de término", blank=True)
     status = models.CharField(
         "status", max_length=20, choices=STATUS, default="AGENDADO"
     )
@@ -200,10 +202,23 @@ class Agendamento(models.Model):
             )
         )
 
+    def _calcular_hora_fim(self):
+        """Hora de término = início + duração do serviço (RN07)."""
+        if self.servico_id is None or self.hora_inicio is None:
+            return None
+        inicio = datetime.combine(date.min, self.hora_inicio)
+        return (inicio + timedelta(minutes=self.servico.duracao_minutos)).time()
+
     def clean(self):
         super().clean()
-        if self.hora_inicio is None or self.hora_fim is None or self.data is None:
+        if self.hora_fim is None:
+            self.hora_fim = self._calcular_hora_fim()
+        if self.hora_inicio is None or self.data is None:
             return
+        if self.hora_fim is None:
+            raise ValidationError(
+                {"hora_fim": "Informe a hora de término ou escolha um serviço."}
+            )
         if self.hora_fim <= self.hora_inicio:
             raise ValidationError(
                 {"hora_fim": "O horário final deve ser posterior ao inicial."}
