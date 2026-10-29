@@ -5,6 +5,7 @@ from .models import (
     Bloqueio,
     Disponibilidade,
     Profissional,
+    Recorrencia,
     Recurso,
     Sala,
     Servico,
@@ -38,6 +39,42 @@ class ServicoAdmin(admin.ModelAdmin):
     search_fields = ("nome", "profissional__usuario__username")
 
 
+class AgendamentoInline(admin.TabularInline):
+    model = Agendamento
+    extra = 0
+    fields = ("data", "hora_inicio", "hora_fim", "status", "sala", "recurso")
+    readonly_fields = ("data", "hora_inicio", "hora_fim", "status", "sala", "recurso")
+    can_delete = True
+    show_change_link = True
+
+
+@admin.register(Recorrencia)
+class RecorrenciaAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "cliente",
+        "profissional",
+        "servico",
+        "data_inicio",
+        "data_fim",
+        "hora_inicio",
+        "padrao",
+        "total_agendamentos",
+    )
+    list_filter = ("padrao", "profissional", "servico")
+    search_fields = (
+        "cliente__username",
+        "profissional__usuario__username",
+        "servico__nome",
+    )
+    inlines = [AgendamentoInline]
+
+    def total_agendamentos(self, obj):
+        return obj.agendamentos.count()
+
+    total_agendamentos.short_description = "Ocorrências"
+
+
 @admin.register(Agendamento)
 class AgendamentoAdmin(admin.ModelAdmin):
     list_display = (
@@ -48,9 +85,10 @@ class AgendamentoAdmin(admin.ModelAdmin):
         "hora_inicio",
         "sala",
         "recurso",
+        "recorrencia",
         "status",
     )
-    list_filter = ("status", "data", "sala", "recurso")
+    list_filter = ("status", "data", "sala", "recurso", "recorrencia")
     search_fields = (
         "cliente__username",
         "profissional__usuario__username",

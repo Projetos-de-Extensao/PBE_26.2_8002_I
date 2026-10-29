@@ -11,6 +11,7 @@ from .models import (
     Bloqueio,
     Disponibilidade,
     Profissional,
+    Recorrencia,
     Recurso,
     Sala,
     Servico,
@@ -475,3 +476,436 @@ class FixtureExemploTests(TestCase):
         agendamento = Agendamento.objects.get(pk=3)
         self.assertEqual(agendamento.sala.nome, "Sala de Pilates")
         self.assertEqual(agendamento.recurso.nome, "Reformer")
+
+
+class RecorrenciaModelTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.cliente = User.objects.create_user("cliente_rec", password="x")
+        self.prof = Profissional.objects.create(
+            usuario=User.objects.create_user("prof_rec", password="x"),
+            especialidade="PERSONAL",
+        )
+        self.servico = Servico.objects.create(
+            profissional=self.prof, nome="Personal 60min", duracao_minutos=60
+        )
+        self.sala = Sala.objects.create(nome="Estúdio A")
+        self.recurso = Recurso.objects.create(nome="Kettlebell")
+
+    def test_str_e_atributos_basicos(self):
+        rec = Recorrencia.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            dias_semana=[0, 2],
+            data_inicio=date(2026, 11, 2),
+            data_fim=date(2026, 11, 16),
+            hora_inicio=time(9),
+        )
+        self.assertEqual(rec.padrao, "SEMANAL")
+        self.assertEqual(rec.data_termino, date(2026, 11, 16))
+        self.assertIn("Segunda-feira, Quarta-feira", str(rec))
+        self.assertIn("09:00:00", str(rec))
+
+    def test_setter_data_termino(self):
+        rec = Recorrencia(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            dias_semana=[0],
+            data_inicio=date(2026, 11, 2),
+            hora_inicio=time(9),
+        )
+        rec.data_termino = date(2026, 11, 30)
+        self.assertEqual(rec.data_fim, date(2026, 11, 30))
+
+    def test_validacao_dias_semana_vazio(self):
+        rec = Recorrencia(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            dias_semana=[],
+            data_inicio=date(2026, 11, 2),
+            data_fim=date(2026, 11, 16),
+            hora_inicio=time(9),
+        )
+        with self.assertRaises(ValidationError):
+            rec.clean()
+
+    def test_validacao_data_fim_anterior_a_data_inicio(self):
+        rec = Recorrencia(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            dias_semana=[0],
+            data_inicio=date(2026, 11, 16),
+            data_fim=date(2026, 11, 2),
+            hora_inicio=time(9),
+        )
+        with self.assertRaises(ValidationError):
+            rec.clean()
+
+    def test_validacao_periodo_sem_dias_correspondentes(self):
+        rec = Recorrencia(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            dias_semana=[0],
+            data_inicio=date(2026, 11, 7),
+            data_fim=date(2026, 11, 8),
+            hora_inicio=time(9),
+        )
+        with self.assertRaises(ValidationError):
+            rec.clean()
+
+    def test_calculo_automatico_hora_fim(self):
+        rec = Recorrencia(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            dias_semana=[0],
+            data_inicio=date(2026, 11, 2),
+            data_fim=date(2026, 11, 9),
+            hora_inicio=time(9),
+        )
+        rec.clean()
+        self.assertEqual(rec.hora_fim, time(10))
+
+    def test_validacao_hora_fim_menor_ou_igual_hora_inicio(self):
+        rec = Recorrencia(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            dias_semana=[0],
+            data_inicio=date(2026, 11, 2),
+            data_fim=date(2026, 11, 9),
+            hora_inicio=time(9),
+            hora_fim=time(8),
+        )
+        with self.assertRaises(ValidationError):
+            rec.clean()
+
+    def test_normalizacao_dias_semana(self):
+        rec = Recorrencia(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            dias_semana="2, 0, 2",
+            data_inicio=date(2026, 11, 2),
+            data_fim=date(2026, 11, 9),
+            hora_inicio=time(9),
+        )
+        rec.clean()
+        self.assertEqual(rec.dias_semana, [0, 2])
+
+
+class RecorrenciaGeracaoOcorrenciasTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.cliente = User.objects.create_user("cliente_ger", password="x")
+        self.cliente2 = User.objects.create_user("cliente_ger2", password="x")
+        self.prof = Profissional.objects.create(
+            usuario=User.objects.create_user("prof_ger", password="x"),
+            especialidade="PERSONAL",
+        )
+        for dia in range(5):
+            Disponibilidade.objects.create(
+                profissional=self.prof,
+                dia_semana=dia,
+                hora_inicio=time(8),
+                hora_fim=time(18),
+            )
+        self.servico = Servico.objects.create(
+            profissional=self.prof, nome="Treino", duracao_minutos=60
+        )
+        self.sala = Sala.objects.create(nome="Sala Recorrente")
+        self.maca = Recurso.objects.create(nome="Maca Recorrente", exclusivo=True)
+
+    def test_geracao_automatica_no_save(self):
+        rec = Recorrencia.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            dias_semana=[0, 2],
+            data_inicio=date(2026, 11, 2),
+            data_fim=date(2026, 11, 16),
+            hora_inicio=time(9),
+            sala=self.sala,
+            recurso=self.maca,
+        )
+        self.assertEqual(rec.agendamentos.count(), 5)
+        for ag in rec.agendamentos.all():
+            self.assertEqual(ag.recorrencia, rec)
+            self.assertEqual(ag.hora_inicio, time(9))
+            self.assertEqual(ag.hora_fim, time(10))
+            self.assertEqual(ag.cliente, self.cliente)
+            self.assertEqual(ag.profissional, self.prof)
+            self.assertEqual(ag.sala, self.sala)
+            self.assertEqual(ag.recurso, self.maca)
+            self.assertTrue(ag.eh_recorrente)
+
+    def test_gerar_ocorrencias_sem_salvar(self):
+        rec = Recorrencia(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            dias_semana=[0],
+            data_inicio=date(2026, 11, 2),
+            data_fim=date(2026, 11, 16),
+            hora_inicio=time(9),
+        )
+        ocorrencias = rec.gerar_ocorrencias(salvar=False)
+        self.assertEqual(len(ocorrencias), 3)
+        self.assertIsNone(rec.pk)
+        self.assertEqual(Agendamento.objects.count(), 0)
+
+    def test_rn11_e_rn12_conflito_individual_descartado_sem_sobrescrever(self):
+        ag_previo = Agendamento.objects.create(
+            cliente=self.cliente2,
+            profissional=self.prof,
+            servico=self.servico,
+            data=date(2026, 11, 9),
+            hora_inicio=time(9),
+            hora_fim=time(10),
+        )
+
+        rec = Recorrencia.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            dias_semana=[0],
+            data_inicio=date(2026, 11, 2),
+            data_fim=date(2026, 11, 16),
+            hora_inicio=time(9),
+        )
+
+        datas_criadas = list(rec.agendamentos.values_list("data", flat=True).order_by("data"))
+        self.assertEqual(datas_criadas, [date(2026, 11, 2), date(2026, 11, 16)])
+
+        ag_previo.refresh_from_db()
+        self.assertEqual(ag_previo.cliente, self.cliente2)
+        self.assertIsNone(ag_previo.recorrencia)
+
+    def test_conflito_com_bloqueio_profissional_descartado(self):
+        Bloqueio.objects.create(
+            profissional=self.prof,
+            data=date(2026, 11, 4),
+            hora_inicio=time(9),
+            hora_fim=time(11),
+            motivo="Reunião",
+        )
+
+        rec = Recorrencia.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            dias_semana=[0, 2],
+            data_inicio=date(2026, 11, 2),
+            data_fim=date(2026, 11, 9),
+            hora_inicio=time(9),
+        )
+        datas = list(rec.agendamentos.values_list("data", flat=True).order_by("data"))
+        self.assertNotIn(date(2026, 11, 4), datas)
+        self.assertIn(date(2026, 11, 2), datas)
+        self.assertIn(date(2026, 11, 9), datas)
+
+    def test_conflito_com_agendamento_existente_do_cliente_descartado(self):
+        prof_outro = Profissional.objects.create(
+            usuario=get_user_model().objects.create_user("prof_outro", password="x"),
+            especialidade="NUTRICIONISTA",
+        )
+        Disponibilidade.objects.create(
+            profissional=prof_outro,
+            dia_semana=0,
+            hora_inicio=time(8),
+            hora_fim=time(18),
+        )
+        Agendamento.objects.create(
+            cliente=self.cliente,
+            profissional=prof_outro,
+            servico=Servico.objects.create(profissional=prof_outro, nome="Nutri", duracao_minutos=60),
+            data=date(2026, 11, 9),
+            hora_inicio=time(9),
+            hora_fim=time(10),
+        )
+
+        rec = Recorrencia.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            dias_semana=[0],
+            data_inicio=date(2026, 11, 2),
+            data_fim=date(2026, 11, 16),
+            hora_inicio=time(9),
+        )
+        datas = list(rec.agendamentos.values_list("data", flat=True).order_by("data"))
+        self.assertEqual(datas, [date(2026, 11, 2), date(2026, 11, 16)])
+
+    def test_conflito_de_sala_descartado(self):
+        prof_outro = Profissional.objects.create(
+            usuario=get_user_model().objects.create_user("prof_sala", password="x"),
+            especialidade="NUTRICIONISTA",
+        )
+        Disponibilidade.objects.create(
+            profissional=prof_outro, dia_semana=0, hora_inicio=time(8), hora_fim=time(18)
+        )
+        Agendamento.objects.create(
+            cliente=self.cliente2,
+            profissional=prof_outro,
+            servico=Servico.objects.create(profissional=prof_outro, nome="Nutri", duracao_minutos=60),
+            sala=self.sala,
+            data=date(2026, 11, 9),
+            hora_inicio=time(9),
+            hora_fim=time(10),
+        )
+
+        rec = Recorrencia.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            sala=self.sala,
+            dias_semana=[0],
+            data_inicio=date(2026, 11, 2),
+            data_fim=date(2026, 11, 16),
+            hora_inicio=time(9),
+        )
+        datas = list(rec.agendamentos.values_list("data", flat=True).order_by("data"))
+        self.assertEqual(datas, [date(2026, 11, 2), date(2026, 11, 16)])
+
+    def test_todas_ocorrencias_em_conflito_lanca_validacao(self):
+        Bloqueio.objects.create(
+            profissional=self.prof,
+            data=date(2026, 11, 2),
+            hora_inicio=time(8),
+            hora_fim=time(12),
+        )
+        with self.assertRaises(ValidationError):
+            Recorrencia.objects.create(
+                cliente=self.cliente,
+                profissional=self.prof,
+                servico=self.servico,
+                dias_semana=[0],
+                data_inicio=date(2026, 11, 2),
+                data_fim=date(2026, 11, 2),
+                hora_inicio=time(9),
+            )
+
+    def test_cancelar_recorrencia(self):
+        rec = Recorrencia.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            dias_semana=[0],
+            data_inicio=date(2026, 11, 2),
+            data_fim=date(2026, 11, 9),
+            hora_inicio=time(9),
+        )
+        self.assertEqual(rec.agendamentos.filter(status="AGENDADO").count(), 2)
+        rec.cancelar()
+        self.assertEqual(rec.agendamentos.filter(status="CANCELADO").count(), 2)
+
+
+class NovoAgendamentoRecorrenciaViewTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.cliente = User.objects.create_user("cliente_view", password="123")
+        self.prof = Profissional.objects.create(
+            usuario=User.objects.create_user("prof_view", password="x"),
+            especialidade="PERSONAL",
+        )
+        for dia in range(5):
+            Disponibilidade.objects.create(
+                profissional=self.prof,
+                dia_semana=dia,
+                hora_inicio=time(8),
+                hora_fim=time(18),
+            )
+        self.servico = Servico.objects.create(
+            profissional=self.prof, nome="Treino", duracao_minutos=60
+        )
+        self.url = reverse("agenda:novo_agendamento")
+
+    def test_get_tela_contem_campos_de_recorrencia(self):
+        self.client.login(username="cliente_view", password="123")
+        resposta = self.client.get(self.url)
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "repetir_semanal")
+        self.assertContains(resposta, "dias_semana")
+        self.assertContains(resposta, "data_fim")
+
+    def test_post_cria_recorrencia_com_sucesso(self):
+        self.client.login(username="cliente_view", password="123")
+        resposta = self.client.post(self.url, {
+            "servico": self.servico.pk,
+            "profissional": self.prof.pk,
+            "data": "2026-11-02",
+            "hora_inicio": "10:00",
+            "repetir_semanal": "on",
+            "dias_semana": ["0", "2"],
+            "data_fim": "2026-11-09",
+        })
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(Recorrencia.objects.count(), 1)
+        rec = Recorrencia.objects.first()
+        self.assertEqual(rec.agendamentos.count(), 3)
+
+    def test_post_recorrencia_sem_marcar_dias_assume_dia_da_data(self):
+        self.client.login(username="cliente_view", password="123")
+        resposta = self.client.post(self.url, {
+            "servico": self.servico.pk,
+            "profissional": self.prof.pk,
+            "data": "2026-11-03",
+            "hora_inicio": "10:00",
+            "repetir_semanal": "on",
+            "data_fim": "2026-11-17",
+        })
+        self.assertEqual(resposta.status_code, 302)
+        rec = Recorrencia.objects.first()
+        self.assertEqual(rec.dias_semana, [1])
+        self.assertEqual(rec.agendamentos.count(), 3)
+
+    def test_post_recorrencia_com_conflito_parcial_exibe_aviso(self):
+        user_outro = get_user_model().objects.create_user("outro", password="x")
+        Agendamento.objects.create(
+            cliente=user_outro,
+            profissional=self.prof,
+            servico=self.servico,
+            data=date(2026, 11, 9),
+            hora_inicio=time(10),
+            hora_fim=time(11),
+        )
+        self.client.login(username="cliente_view", password="123")
+        resposta = self.client.post(self.url, {
+            "servico": self.servico.pk,
+            "profissional": self.prof.pk,
+            "data": "2026-11-02",
+            "hora_inicio": "10:00",
+            "repetir_semanal": "on",
+            "dias_semana": ["0"],
+            "data_fim": "2026-11-16",
+        }, follow=True)
+        self.assertEqual(resposta.status_code, 200)
+        rec = Recorrencia.objects.first()
+        self.assertEqual(rec.agendamentos.count(), 2)
+        self.assertContains(resposta, "descartadas")
+
+    def test_post_recorrencia_com_conflito_total_exibe_erro(self):
+        Bloqueio.objects.create(
+            profissional=self.prof,
+            data=date(2026, 11, 2),
+            hora_inicio=time(8),
+            hora_fim=time(18),
+        )
+        self.client.login(username="cliente_view", password="123")
+        resposta = self.client.post(self.url, {
+            "servico": self.servico.pk,
+            "profissional": self.prof.pk,
+            "data": "2026-11-02",
+            "hora_inicio": "10:00",
+            "repetir_semanal": "on",
+            "dias_semana": ["0"],
+            "data_fim": "2026-11-02",
+        })
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(Recorrencia.objects.count(), 0)
+        self.assertContains(resposta, "apresentaram conflito")

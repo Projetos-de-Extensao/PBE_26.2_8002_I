@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
-from django.db import models
+from django.db import models, transaction
 
 
 class Sala(models.Model):
@@ -223,7 +223,7 @@ class Bloqueio(models.Model):
 class Agendamento(models.Model):
     """Reserva de um atendimento entre um cliente e um profissional.
 
-    RF10, RF13, RF14, RF15. RN01 (conflito do profissional), RN02 (conflito
+    RF10, RF13, RF14, RF15, RF16. RN01 (conflito do profissional), RN02 (conflito
     do cliente), RN03 (sala), RN04 (recurso exclusivo), RN05
     (disponibilidade), RN13 (bloqueio); agendamentos cancelados não bloqueiam
     horários.
@@ -267,6 +267,13 @@ class Agendamento(models.Model):
         null=True,
         blank=True,
     )
+    recorrencia = models.ForeignKey(
+        "Recorrencia",
+        on_delete=models.CASCADE,
+        related_name="agendamentos",
+        null=True,
+        blank=True,
+    )
     data = models.DateField("data")
     hora_inicio = models.TimeField("hora de início")
     hora_fim = models.TimeField("hora de término", blank=True)
@@ -283,6 +290,10 @@ class Agendamento(models.Model):
 
     def __str__(self):
         return f"{self.cliente} - {self.profissional} - {self.data} {self.hora_inicio}"
+
+    @property
+    def eh_recorrente(self):
+        return self.recorrencia_id is not None
 
     def _conflitantes(self):
         """Agendamentos ativos no mesmo dia cujo horário se sobrepõe a este."""
@@ -371,6 +382,229 @@ class Agendamento(models.Model):
         # Garante as validações críticas no back-end, fora de formulários.
         self.clean()
         super().save(*args, **kwargs)
+
+
+class Recorrencia(models.Model):
+    """Padrão de repetição de agendamentos (RF16).
+
+    RN11: cada ocorrência é validada individualmente contra as regras RN01 a RN06.
+    RN12: ocorrência de recorrência em conflito não pode sobrescrever reserva
+    existente; ela é descartada.
+    """
+
+    PADROES = [
+        ("SEMANAL", "Semanal"),
+    ]
+
+    cliente = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="recorrencias",
+    )
+    profissional = models.ForeignKey(
+        Profissional,
+        on_delete=models.CASCADE,
+        related_name="recorrencias",
+    )
+    servico = models.ForeignKey(
+        Servico,
+        on_delete=models.PROTECT,
+        related_name="recorrencias",
+        null=True,
+        blank=True,
+    )
+    sala = models.ForeignKey(
+        Sala,
+        on_delete=models.PROTECT,
+        related_name="recorrencias",
+        null=True,
+        blank=True,
+    )
+    recurso = models.ForeignKey(
+        Recurso,
+        on_delete=models.PROTECT,
+        related_name="recorrencias",
+        null=True,
+        blank=True,
+    )
+    padrao = models.CharField(
+        "padrão", max_length=20, choices=PADROES, default="SEMANAL"
+    )
+    dias_semana = models.JSONField("dias da semana", default=list)
+    data_inicio = models.DateField("data de início")
+    data_fim = models.DateField("data de término")
+    hora_inicio = models.TimeField("hora de início")
+    hora_fim = models.TimeField("hora de término", blank=True)
+    observacao = models.TextField("observação", blank=True)
+    criado_em = models.DateTimeField("criado em", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "recorrência"
+        verbose_name_plural = "recorrências"
+        ordering = ["-criado_em"]
+
+    def __str__(self):
+        dias = self.get_dias_semana_display() or "sem dias"
+        return f"{self.cliente} - {self.profissional} ({dias}, {self.hora_inicio})"
+
+    @property
+    def data_termino(self):
+        return self.data_fim
+
+    @data_termino.setter
+    def data_termino(self, valor):
+        self.data_fim = valor
+
+    def get_dias_semana_display(self):
+        mapa = dict(DIAS_SEMANA)
+        return ", ".join(mapa.get(int(d), str(d)) for d in (self.dias_semana or []))
+
+    def _calcular_hora_fim(self):
+        if self.servico_id is None or self.hora_inicio is None:
+            return None
+        inicio = datetime.combine(date.min, self.hora_inicio)
+        return (inicio + timedelta(minutes=self.servico.duracao_minutos)).time()
+
+    def clean(self):
+        super().clean()
+        if isinstance(self.dias_semana, str):
+            if self.dias_semana.strip():
+                self.dias_semana = [
+                    int(d.strip())
+                    for d in self.dias_semana.split(",")
+                    if d.strip().isdigit()
+                ]
+            else:
+                self.dias_semana = []
+        elif isinstance(self.dias_semana, (list, tuple, set)):
+            self.dias_semana = sorted(list({int(d) for d in self.dias_semana}))
+        elif self.dias_semana is None:
+            self.dias_semana = []
+
+        if not self.dias_semana:
+            raise ValidationError(
+                {"dias_semana": "Selecione ao menos um dia da semana para a recorrência."}
+            )
+
+        for dia in self.dias_semana:
+            if dia not in range(7):
+                raise ValidationError(
+                    {"dias_semana": f"Dia da semana inválido: {dia}."}
+                )
+
+        if self.data_inicio and self.data_fim and self.data_fim < self.data_inicio:
+            raise ValidationError(
+                {"data_fim": "A data final deve ser posterior ou igual à data inicial."}
+            )
+
+        if self.data_inicio and self.data_fim and not self.datas_do_periodo():
+            raise ValidationError(
+                {
+                    "data_fim": (
+                        "O período informado não contempla nenhum dos dias da "
+                        "semana selecionados."
+                    )
+                }
+            )
+
+        if self.hora_fim is None:
+            self.hora_fim = self._calcular_hora_fim()
+
+        if self.hora_inicio and self.hora_fim and self.hora_fim <= self.hora_inicio:
+            raise ValidationError(
+                {"hora_fim": "O horário final deve ser posterior ao inicial."}
+            )
+
+    def datas_do_periodo(self):
+        """Datas entre data_inicio e data_fim que coincidem com dias_semana."""
+        if not self.data_inicio or not self.data_fim or not self.dias_semana:
+            return []
+        dias_alvo = set(self.dias_semana)
+        datas = []
+        atual = self.data_inicio
+        while atual <= self.data_fim:
+            if atual.weekday() in dias_alvo:
+                datas.append(atual)
+            atual += timedelta(days=1)
+        return datas
+
+    def avaliar_ocorrencias(self):
+        """Avalia individualmente cada ocorrência do período contra RN01 a RN06 e RN13.
+
+        Retorna (validos, conflitos):
+        - validos: lista de Agendamento válidos (não salvos ainda).
+        - conflitos: lista de tuplas (Agendamento, mensagem_erro).
+        """
+        validos = []
+        conflitos = []
+        hora_fim = self.hora_fim or self._calcular_hora_fim()
+        for d in self.datas_do_periodo():
+            ag = Agendamento(
+                cliente=self.cliente,
+                profissional=self.profissional,
+                servico=self.servico,
+                sala=self.sala,
+                recurso=self.recurso,
+                data=d,
+                hora_inicio=self.hora_inicio,
+                hora_fim=hora_fim,
+                observacao=self.observacao,
+                recorrencia=self,
+            )
+            try:
+                ag.clean()
+            except ValidationError as erro:
+                msg = (
+                    " ".join(erro.messages)
+                    if hasattr(erro, "messages")
+                    else str(erro)
+                )
+                conflitos.append((ag, msg))
+            else:
+                validos.append(ag)
+        return validos, conflitos
+
+    def gerar_ocorrencias(self, salvar=True, descartar_conflitos=True):
+        """Gera e opcionalmente persiste os agendamentos da série (RF16).
+
+        RN11: cada ocorrência é validada individualmente.
+        RN12: ocorrências em conflito são descartadas.
+        """
+        validos, conflitos = self.avaliar_ocorrencias()
+        self.ultimos_conflitos = conflitos
+
+        if not validos and conflitos and salvar:
+            raise ValidationError(
+                "Nenhuma ocorrência pôde ser gerada devido a conflitos de horário em todas as datas."
+            )
+
+        if salvar:
+            if self.pk is None:
+                super().save()
+            for ag in validos:
+                ag.recorrencia = self
+                ag.save()
+
+        return validos
+
+    gerarOcorrencias = gerar_ocorrencias
+
+    def save(self, *args, **kwargs):
+        gerar = kwargs.pop("gerar_agendamentos", True)
+        is_novo = self.pk is None
+        self.clean()
+        if is_novo and gerar:
+            with transaction.atomic():
+                super().save(*args, **kwargs)
+                self.gerar_ocorrencias(salvar=True)
+        else:
+            super().save(*args, **kwargs)
+
+    def cancelar(self):
+        """Cancela todos os agendamentos ativos desta série (RN10)."""
+        return self.agendamentos.exclude(status="CANCELADO").update(
+            status="CANCELADO"
+        )
 
 
 def horarios_livres(profissional, data, duracao_minutos=30):
