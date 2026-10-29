@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Agenda{% endblock %}</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 2rem; color: #222; }
+  nav a { margin-right: 1rem; }
+  table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+  th, td { border: 1px solid #ccc; padding: 0.5rem; text-align: left; }
+  .erro { color: #b00020; }
+  .acoes form { display: inline; }
+  dialog { border: none; border-radius: 6px; padding: 1.5rem; min-width: 320px; }
+  dialog::backdrop { background: rgba(0, 0, 0, 0.4); }
+  .campo { margin-bottom: 0.75rem; }
+  .campo label { display: block; margin-bottom: 0.25rem; }
+  fieldset { margin-top: 1.5rem; }
+</style>
+</head>
+<body>
+<nav>
+  <a href="{% url 'agenda:painel_profissional' %}">Painel do profissional</a>
+  <a href="{% url 'agenda:disponibilidade_bloqueio' %}">Disponibilidade e bloqueios</a>
+</nav>
+<hr>
+{% block conteudo %}{% endblock %}
+</body>
+</html>
