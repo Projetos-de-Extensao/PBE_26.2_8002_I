@@ -1,0 +1,28 @@
+{% extends "agenda/base.html" %}
+
+{% block title %}Confirmar bloqueio{% endblock %}
+
+{% block conteudo %}
+<h1>Confirmar bloqueio</h1>
+<p>Este período tem atendimentos marcados. Confira antes de bloquear:</p>
+
+<table>
+  <tr><th>Horário</th><th>Serviço</th><th>Cliente</th></tr>
+  {% for agendamento in afetados %}
+  <tr>
+    <td>{{ agendamento.hora_inicio|time:"H:i" }} - {{ agendamento.hora_fim|time:"H:i" }}</td>
+    <td>{{ agendamento.servico }}</td>
+    <td>{{ agendamento.cliente }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<form method="post" action="{% url 'agenda:criar_bloqueio' %}">
+  {% csrf_token %}
+  <input type="hidden" name="confirmar" value="1">
+  <input type="hidden" name="origem" value="{{ destino }}">
+  {{ form.as_p }}
+  <button type="submit">Confirmar e bloquear mesmo assim</button>
+  <a href="{{ destino }}">Cancelar</a>
+</form>
+{% endblock %}
