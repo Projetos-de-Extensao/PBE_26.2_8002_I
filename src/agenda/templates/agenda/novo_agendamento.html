@@ -3,6 +3,21 @@
 {% block title %}Novo agendamento{% endblock %}
 
 {% block conteudo %}
+<style>
+  .badge-valido { background: #e8f5ee; color: #1b7f4b; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: bold; font-size: 0.85rem; display: inline-block; }
+  .badge-conflito { background: #fdecea; color: #b00020; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: bold; font-size: 0.85rem; display: inline-block; }
+  .resumo-metricas { display: flex; gap: 1rem; margin: 1rem 0; }
+  .card-metrica { background: #f8f9fa; border: 1px solid #ddd; border-radius: 6px; padding: 0.6rem 1rem; flex: 1; text-align: center; }
+  .card-metrica .valor { font-size: 1.3rem; font-weight: bold; display: block; }
+  .card-metrica .rotulo { font-size: 0.8rem; color: #666; }
+  .card-metrica.valido .valor { color: #1b7f4b; }
+  .card-metrica.conflito .valor { color: #b00020; }
+  .container-tabela-previa { max-height: 260px; overflow-y: auto; margin-top: 1rem; border: 1px solid #ccc; border-radius: 4px; }
+  .container-tabela-previa table { margin-top: 0; }
+  dialog#modal-recorrencia { max-width: 680px; width: 92%; }
+  .linha-conflito { background-color: #fff8f8; }
+</style>
+
 <h1>Novo agendamento</h1>
 
 {% if form.non_field_errors and not conflito %}
@@ -11,7 +26,7 @@
   {% endfor %}
 {% endif %}
 
-<form method="post" id="form-agendamento">
+<form method="post" id="form-agendamento" action="{% url 'agenda:novo_agendamento' %}">
   {% csrf_token %}
   {% for campo in form %}
     <div class="campo campo-{{ campo.name }}" id="grupo-{{ campo.name }}">
@@ -23,7 +38,8 @@
     </div>
   {% endfor %}
   <p class="ajuda">A hora de término é calculada pela duração do serviço.</p>
-  <button type="submit">Agendar</button>
+  <button type="submit" id="botao-submeter">Agendar</button>
+  <button type="button" id="botao-ver-previa" style="display: none;">Ver prévia das datas</button>
 </form>
 
 <dialog id="modal-conflito"{% if conflito %} data-abrir="1"{% endif %}>
@@ -61,6 +77,49 @@
     <button type="button" id="botao-voltar">Voltar</button>
   </p>
 </dialog>
+
+<!-- Janela para visualização de prévia e confirmação de recorrências (RF16) -->
+<dialog id="modal-recorrencia">
+  <h2>Prévia da recorrência semanal</h2>
+  <p id="resumo-cabecalho-recorrencia"></p>
+
+  <div class="resumo-metricas">
+    <div class="card-metrica">
+      <span class="valor" id="metrica-total">0</span>
+      <span class="rotulo">Total de sessões</span>
+    </div>
+    <div class="card-metrica valido">
+      <span class="valor" id="metrica-validas">0</span>
+      <span class="rotulo">Sessões disponíveis</span>
+    </div>
+    <div class="card-metrica conflito">
+      <span class="valor" id="metrica-conflitos">0</span>
+      <span class="rotulo">Com conflito</span>
+    </div>
+  </div>
+
+  <div id="aviso-conflitos-recorrencia" class="aviso erro" style="display: none;"></div>
+
+  <div class="container-tabela-previa">
+    <table id="tabela-sessoes-recorrencia">
+      <thead>
+        <tr>
+          <th>Data</th>
+          <th>Horário</th>
+          <th>Status</th>
+          <th>Observação</th>
+        </tr>
+      </thead>
+      <tbody id="corpo-tabela-recorrencia">
+      </tbody>
+    </table>
+  </div>
+
+  <p style="margin-top: 1.2rem;">
+    <button type="button" id="botao-confirmar-recorrencia">Confirmar criação das sessões</button>
+    <button type="button" id="botao-voltar-recorrencia">Voltar e ajustar</button>
+  </p>
+</dialog>
 {% endblock %}
 
 {% block scripts %}
@@ -70,11 +129,13 @@
     const checkRepetir = document.getElementById("id_repetir_semanal");
     const grupoDataFim = document.getElementById("grupo-data_fim");
     const grupoDias = document.getElementById("grupo-dias_semana");
+    const botaoPrevia = document.getElementById("botao-ver-previa");
 
     const atualizarVisibilidade = function () {
       const visivel = checkRepetir && checkRepetir.checked;
       if (grupoDataFim) grupoDataFim.style.display = visivel ? "" : "none";
       if (grupoDias) grupoDias.style.display = visivel ? "" : "none";
+      if (botaoPrevia) botaoPrevia.style.display = visivel ? "inline-block" : "none";
     };
 
     if (checkRepetir) {
@@ -83,19 +144,20 @@
     }
   })();
 
-  // Mostra o resumo do agendamento antes de enviar o formulário (#22).
+  // Modais de confirmação e prévia (#22, RF16)
   (function () {
     const form = document.getElementById("form-agendamento");
-    const modal = document.getElementById("modal-confirmacao");
-    if (!form || !modal || typeof modal.showModal !== "function") {
-      return;  // sem suporte a <dialog>: o formulário envia direto
+    const modalConfirmacao = document.getElementById("modal-confirmacao");
+    const modalRecorrencia = document.getElementById("modal-recorrencia");
+    const urlPrevia = "{% url 'agenda:previa_recorrencia' %}";
+
+    if (!form || !modalConfirmacao || typeof modalConfirmacao.showModal !== "function") {
+      return;  // sem suporte a <dialog>: formulário envia direto
     }
 
     const textoDoCampo = function (nome, vazio) {
       const campo = form.elements[nome];
-      if (!campo || !campo.value) {
-        return vazio;
-      }
+      if (!campo || !campo.value) return vazio;
       if (campo.tagName === "SELECT") {
         return campo.options[campo.selectedIndex].text;
       }
@@ -104,41 +166,142 @@
 
     let confirmado = false;
 
+    const carregarEExibirPreviaRecorrencia = function () {
+      const formData = new FormData(form);
+      const servicoNome = textoDoCampo("servico", "");
+      const profNome = textoDoCampo("profissional", "");
+      const horaInicio = textoDoCampo("hora_inicio", "");
+
+      document.getElementById("resumo-cabecalho-recorrencia").textContent =
+        servicoNome + " com " + profNome + " às " + horaInicio;
+
+      fetch(urlPrevia, {
+        method: "POST",
+        body: formData,
+        headers: { "X-Requested-With": "XMLHttpRequest" }
+      })
+      .then(function (res) {
+        return res.json().then(function (data) {
+          return { ok: res.ok, status: res.status, data: data };
+        });
+      })
+      .then(function (res) {
+        if (!res.ok || !res.data.valido) {
+          alert(res.data.erro || "Erro ao gerar prévia da recorrência.");
+          return;
+        }
+
+        const info = res.data;
+        document.getElementById("metrica-total").textContent = info.total;
+        document.getElementById("metrica-validas").textContent = info.total_validas;
+        document.getElementById("metrica-conflitos").textContent = info.total_conflitos;
+
+        const avisoConflito = document.getElementById("aviso-conflitos-recorrencia");
+        const btnConfirmar = document.getElementById("botao-confirmar-recorrencia");
+
+        if (info.total_conflitos > 0) {
+          avisoConflito.style.display = "block";
+          if (info.total_validas === 0) {
+            avisoConflito.textContent = "Todas as " + info.total + " sessões apresentam conflitos de horário. Não é possível confirmar este agendamento.";
+            btnConfirmar.disabled = true;
+          } else {
+            avisoConflito.textContent = info.total_conflitos + " sessão(ões) com conflito foram identificadas e serão descartadas (RN12). Serão criadas " + info.total_validas + " sessões.";
+            btnConfirmar.disabled = false;
+          }
+        } else {
+          avisoConflito.style.display = "none";
+          btnConfirmar.disabled = false;
+        }
+
+        const corpoTabela = document.getElementById("corpo-tabela-recorrencia");
+        corpoTabela.innerHTML = "";
+
+        info.sessoes.forEach(function (s) {
+          const tr = document.createElement("tr");
+          if (s.conflito) tr.className = "linha-conflito";
+
+          const tdData = document.createElement("td");
+          tdData.textContent = s.data_formatada;
+          tr.appendChild(tdData);
+
+          const tdHora = document.createElement("td");
+          tdHora.textContent = s.horario;
+          tr.appendChild(tdHora);
+
+          const tdStatus = document.createElement("td");
+          const spanStatus = document.createElement("span");
+          spanStatus.className = s.conflito ? "badge-conflito" : "badge-valido";
+          spanStatus.textContent = s.status;
+          tdStatus.appendChild(spanStatus);
+          tr.appendChild(tdStatus);
+
+          const tdMotivo = document.createElement("td");
+          tdMotivo.textContent = s.conflito ? s.motivo : "Pronto para agendar";
+          tr.appendChild(tdMotivo);
+
+          corpoTabela.appendChild(tr);
+        });
+
+        modalRecorrencia.showModal();
+      })
+      .catch(function (err) {
+        alert("Erro de comunicação ao carregar a prévia da recorrência.");
+      });
+    };
+
     form.addEventListener("submit", function (evento) {
       if (confirmado || !form.checkValidity()) {
         return;
       }
       evento.preventDefault();
-      document.getElementById("resumo-servico").textContent = textoDoCampo("servico", "-");
-      document.getElementById("resumo-profissional").textContent = textoDoCampo("profissional", "-");
-      document.getElementById("resumo-sala").textContent = textoDoCampo("sala", "Sem sala");
-      document.getElementById("resumo-recurso").textContent = textoDoCampo("recurso", "Sem equipamento");
 
-      let resumoData = textoDoCampo("data", "-");
       const checkRepetir = form.elements["repetir_semanal"];
       if (checkRepetir && checkRepetir.checked) {
-        const fim = textoDoCampo("data_fim", "");
-        if (fim) {
-          resumoData += " até " + fim + " (Recorrente)";
-        }
+        carregarEExibirPreviaRecorrencia();
+      } else {
+        document.getElementById("resumo-servico").textContent = textoDoCampo("servico", "-");
+        document.getElementById("resumo-profissional").textContent = textoDoCampo("profissional", "-");
+        document.getElementById("resumo-sala").textContent = textoDoCampo("sala", "Sem sala");
+        document.getElementById("resumo-recurso").textContent = textoDoCampo("recurso", "Sem equipamento");
+        document.getElementById("resumo-data").textContent = textoDoCampo("data", "-");
+        document.getElementById("resumo-hora").textContent = textoDoCampo("hora_inicio", "-");
+        modalConfirmacao.showModal();
       }
-      document.getElementById("resumo-data").textContent = resumoData;
-      document.getElementById("resumo-hora").textContent = textoDoCampo("hora_inicio", "-");
-      modal.showModal();
     });
+
+    const botaoPrevia = document.getElementById("botao-ver-previa");
+    if (botaoPrevia) {
+      botaoPrevia.addEventListener("click", function () {
+        if (form.checkValidity()) {
+          carregarEExibirPreviaRecorrencia();
+        } else {
+          form.reportValidity();
+        }
+      });
+    }
 
     document.getElementById("botao-confirmar").addEventListener("click", function () {
       confirmado = true;
-      modal.close();
+      modalConfirmacao.close();
       form.submit();
     });
 
     document.getElementById("botao-voltar").addEventListener("click", function () {
-      modal.close();
+      modalConfirmacao.close();
+    });
+
+    document.getElementById("botao-confirmar-recorrencia").addEventListener("click", function () {
+      confirmado = true;
+      modalRecorrencia.close();
+      form.submit();
+    });
+
+    document.getElementById("botao-voltar-recorrencia").addEventListener("click", function () {
+      modalRecorrencia.close();
     });
   })();
 
-  // Modal de conflito: motivo da recusa e sugestões de horário (#23).
+  // Modal de conflito pontual (#23)
   (function () {
     const modal = document.getElementById("modal-conflito");
     if (!modal || typeof modal.showModal !== "function") {

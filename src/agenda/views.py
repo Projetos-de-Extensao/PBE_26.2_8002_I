@@ -1,18 +1,23 @@
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
 from .forms import AgendamentoForm, BloqueioForm, DisponibilidadeForm
 from .models import (
+    DIAS_SEMANA,
     Agendamento,
     Bloqueio,
     Disponibilidade,
     Profissional,
     Recorrencia,
+    Recurso,
+    Sala,
+    Servico,
     horarios_livres,
 )
 
@@ -258,4 +263,124 @@ def novo_agendamento(request):
         request,
         "agenda/novo_agendamento.html",
         {"form": form, "conflito": conflito, "sugestoes": sugestoes},
+    )
+
+
+@login_required
+def previa_recorrencia(request):
+    """Retorna a prévia das ocorrências de uma recorrência com identificação de conflitos (RF16)."""
+    if request.method != "POST":
+        return JsonResponse({"erro": "Método não permitido."}, status=405)
+
+    servico_id = request.POST.get("servico")
+    profissional_id = request.POST.get("profissional")
+    data_str = request.POST.get("data")
+    data_fim_str = request.POST.get("data_fim")
+    hora_str = request.POST.get("hora_inicio")
+    sala_id = request.POST.get("sala") or None
+    recurso_id = request.POST.get("recurso") or None
+    dias_semana_raw = request.POST.getlist("dias_semana")
+
+    if not all([servico_id, profissional_id, data_str, data_fim_str, hora_str]):
+        return JsonResponse(
+            {
+                "valido": False,
+                "erro": "Preencha o serviço, profissional, horário, data inicial e data final.",
+            },
+            status=400,
+        )
+
+    try:
+        data_inicio = date.fromisoformat(data_str)
+        data_fim = date.fromisoformat(data_fim_str)
+        hora_inicio = time.fromisoformat(hora_str)
+    except ValueError:
+        return JsonResponse(
+            {"valido": False, "erro": "Formato de data ou horário inválido."},
+            status=400,
+        )
+
+    if data_fim < data_inicio:
+        return JsonResponse(
+            {
+                "valido": False,
+                "erro": "A data final deve ser posterior ou igual à data inicial.",
+            },
+            status=400,
+        )
+
+    dias_semana = (
+        [int(d) for d in dias_semana_raw if d.isdigit()]
+        if dias_semana_raw
+        else [data_inicio.weekday()]
+    )
+
+    servico = get_object_or_404(Servico, pk=servico_id)
+    profissional = get_object_or_404(Profissional, pk=profissional_id)
+    sala = get_object_or_404(Sala, pk=sala_id) if sala_id else None
+    recurso = get_object_or_404(Recurso, pk=recurso_id) if recurso_id else None
+
+    recorrencia = Recorrencia(
+        cliente=request.user,
+        profissional=profissional,
+        servico=servico,
+        sala=sala,
+        recurso=recurso,
+        padrao="SEMANAL",
+        dias_semana=dias_semana,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+        hora_inicio=hora_inicio,
+    )
+
+    try:
+        recorrencia.clean()
+    except ValidationError as erro:
+        msg = " ".join(erro.messages) if hasattr(erro, "messages") else str(erro)
+        return JsonResponse({"valido": False, "erro": msg}, status=400)
+
+    validos, conflitos = recorrencia.avaliar_ocorrencias()
+    mapa_conflitos = {ag.data: motivo for ag, motivo in conflitos}
+
+    datas_todas = recorrencia.datas_do_periodo()
+    hora_fim = recorrencia.hora_fim
+    hora_fim_str = hora_fim.strftime("%H:%M") if hora_fim else ""
+    hora_inicio_str = hora_inicio.strftime("%H:%M")
+
+    sessoes = []
+    mapa_dias = dict(DIAS_SEMANA)
+    for d in datas_todas:
+        nome_dia = mapa_dias.get(d.weekday(), "")
+        data_formatada = f"{d.strftime('%d/%m/%Y')} ({nome_dia})"
+        if d in mapa_conflitos:
+            sessoes.append(
+                {
+                    "data": d.isoformat(),
+                    "data_formatada": data_formatada,
+                    "horario": f"{hora_inicio_str} - {hora_fim_str}",
+                    "conflito": True,
+                    "status": "Conflito",
+                    "motivo": mapa_conflitos[d],
+                }
+            )
+        else:
+            sessoes.append(
+                {
+                    "data": d.isoformat(),
+                    "data_formatada": data_formatada,
+                    "horario": f"{hora_inicio_str} - {hora_fim_str}",
+                    "conflito": False,
+                    "status": "Disponível",
+                    "motivo": "",
+                }
+            )
+
+    return JsonResponse(
+        {
+            "valido": True,
+            "total": len(datas_todas),
+            "total_validas": len(validos),
+            "total_conflitos": len(conflitos),
+            "sessoes": sessoes,
+        }
     )
