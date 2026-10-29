@@ -12,6 +12,7 @@ from .models import (
     Bloqueio,
     Disponibilidade,
     Profissional,
+    Recorrencia,
     horarios_livres,
 )
 
@@ -155,17 +156,19 @@ def _sugestoes_de_horario(dados):
 def _mensagens_de_conflito(form):
     """Erros de validação que impedem a reserva do horário escolhido."""
     mensagens = list(form.non_field_errors())
-    for campo in ("sala", "recurso"):
+    for campo in ("sala", "recurso", "data_fim", "dias_semana"):
         mensagens += list(form.errors.get(campo, []))
     return mensagens
 
 
 @login_required
 def novo_agendamento(request):
-    """Tela de criação de agendamento (RF10).
+    """Tela de criação de agendamento (RF10, RF16).
 
     Quando a validação recusa o horário, a tela reabre com o motivo do
     conflito e sugestões de horários livres no mesmo dia (RF26).
+    Em agendamento recorrente, valida cada ocorrência individualmente (RN11)
+    e descarta ocorrências em conflito (RN12).
     """
     conflito = None
     sugestoes = []
@@ -173,15 +176,76 @@ def novo_agendamento(request):
     if request.method == "POST":
         form = AgendamentoForm(request.POST)
         if form.is_valid():
-            agendamento = form.save(commit=False)
-            agendamento.cliente = request.user
-            try:
-                agendamento.save()
-            except ValidationError as erro:
-                conflito = " ".join(erro.messages)
+            if form.cleaned_data.get("repetir_semanal"):
+                dias = [
+                    int(d)
+                    for d in form.cleaned_data.get("dias_semana")
+                    or [form.cleaned_data["data"].weekday()]
+                ]
+                recorrencia = Recorrencia(
+                    cliente=request.user,
+                    profissional=form.cleaned_data["profissional"],
+                    servico=form.cleaned_data["servico"],
+                    sala=form.cleaned_data.get("sala"),
+                    recurso=form.cleaned_data.get("recurso"),
+                    padrao="SEMANAL",
+                    dias_semana=dias,
+                    data_inicio=form.cleaned_data["data"],
+                    data_fim=form.cleaned_data["data_fim"],
+                    hora_inicio=form.cleaned_data["hora_inicio"],
+                )
+                try:
+                    recorrencia.clean()
+                    validos, conflitos_rec = recorrencia.avaliar_ocorrencias()
+                    if not validos:
+                        motivo = (
+                            conflitos_rec[0][1]
+                            if conflitos_rec
+                            else "Nenhum horário livre no período."
+                        )
+                        conflito = (
+                            f"Todas as ocorrências no período apresentaram conflito: "
+                            f"{motivo}"
+                        )
+                    else:
+                        recorrencia.save(gerar_agendamentos=False)
+                        for ag in validos:
+                            ag.recorrencia = recorrencia
+                            ag.save()
+                        qtd_validos = len(validos)
+                        qtd_conflitos = len(conflitos_rec)
+                        if qtd_conflitos > 0:
+                            datas_conflito = ", ".join(
+                                ag.data.strftime("%d/%m/%Y")
+                                for ag, _ in conflitos_rec
+                            )
+                            messages.warning(
+                                request,
+                                f"Recorrência criada com {qtd_validos} agendamento(s). "
+                                f"{qtd_conflitos} ocorrência(s) com conflito foram descartadas ({datas_conflito}).",
+                            )
+                        else:
+                            messages.success(
+                                request,
+                                f"Recorrência criada com sucesso: {qtd_validos} agendamentos gerados.",
+                            )
+                        return redirect("agenda:novo_agendamento")
+                except ValidationError as erro:
+                    conflito = (
+                        " ".join(erro.messages)
+                        if hasattr(erro, "messages")
+                        else str(erro)
+                    )
             else:
-                messages.success(request, "Agendamento criado com sucesso.")
-                return redirect("agenda:novo_agendamento")
+                agendamento = form.save(commit=False)
+                agendamento.cliente = request.user
+                try:
+                    agendamento.save()
+                except ValidationError as erro:
+                    conflito = " ".join(erro.messages)
+                else:
+                    messages.success(request, "Agendamento criado com sucesso.")
+                    return redirect("agenda:novo_agendamento")
         else:
             mensagens = _mensagens_de_conflito(form)
             conflito = " ".join(mensagens) if mensagens else None

@@ -14,7 +14,7 @@
 <form method="post" id="form-agendamento">
   {% csrf_token %}
   {% for campo in form %}
-    <div class="campo">
+    <div class="campo campo-{{ campo.name }}" id="grupo-{{ campo.name }}">
       <label for="{{ campo.id_for_label }}">{{ campo.label }}</label>
       {{ campo }}
       {% for erro in campo.errors %}
@@ -65,6 +65,24 @@
 
 {% block scripts %}
 <script>
+  // Mostra/oculta opções de recorrência conforme o checkbox (#RF16).
+  (function () {
+    const checkRepetir = document.getElementById("id_repetir_semanal");
+    const grupoDataFim = document.getElementById("grupo-data_fim");
+    const grupoDias = document.getElementById("grupo-dias_semana");
+
+    const atualizarVisibilidade = function () {
+      const visivel = checkRepetir && checkRepetir.checked;
+      if (grupoDataFim) grupoDataFim.style.display = visivel ? "" : "none";
+      if (grupoDias) grupoDias.style.display = visivel ? "" : "none";
+    };
+
+    if (checkRepetir) {
+      checkRepetir.addEventListener("change", atualizarVisibilidade);
+      atualizarVisibilidade();
+    }
+  })();
+
   // Mostra o resumo do agendamento antes de enviar o formulário (#22).
   (function () {
     const form = document.getElementById("form-agendamento");
@@ -95,7 +113,16 @@
       document.getElementById("resumo-profissional").textContent = textoDoCampo("profissional", "-");
       document.getElementById("resumo-sala").textContent = textoDoCampo("sala", "Sem sala");
       document.getElementById("resumo-recurso").textContent = textoDoCampo("recurso", "Sem equipamento");
-      document.getElementById("resumo-data").textContent = textoDoCampo("data", "-");
+
+      let resumoData = textoDoCampo("data", "-");
+      const checkRepetir = form.elements["repetir_semanal"];
+      if (checkRepetir && checkRepetir.checked) {
+        const fim = textoDoCampo("data_fim", "");
+        if (fim) {
+          resumoData += " até " + fim + " (Recorrente)";
+        }
+      }
+      document.getElementById("resumo-data").textContent = resumoData;
       document.getElementById("resumo-hora").textContent = textoDoCampo("hora_inicio", "-");
       modal.showModal();
     });
