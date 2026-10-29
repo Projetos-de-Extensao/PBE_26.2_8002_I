@@ -5,24 +5,91 @@
 {% block conteudo %}
 <h1>Novo agendamento</h1>
 
-  {% if form.non_field_errors %}
-    {% for erro in form.non_field_errors %}
-      <div class="aviso erro">{{ erro }}</div>
-    {% endfor %}
-  {% endif %}
+{% if form.non_field_errors %}
+  {% for erro in form.non_field_errors %}
+    <div class="aviso erro">{{ erro }}</div>
+  {% endfor %}
+{% endif %}
 
-  <form method="post">
-    {% csrf_token %}
-    {% for campo in form %}
-      <div class="campo">
-        <label for="{{ campo.id_for_label }}">{{ campo.label }}</label>
-        {{ campo }}
-        {% for erro in campo.errors %}
-          <div class="aviso erro">{{ erro }}</div>
-        {% endfor %}
-      </div>
-    {% endfor %}
-    <p class="ajuda">A hora de término é calculada pela duração do serviço.</p>
-    <button type="submit">Agendar</button>
-  </form>
+<form method="post" id="form-agendamento">
+  {% csrf_token %}
+  {% for campo in form %}
+    <div class="campo">
+      <label for="{{ campo.id_for_label }}">{{ campo.label }}</label>
+      {{ campo }}
+      {% for erro in campo.errors %}
+        <div class="aviso erro">{{ erro }}</div>
+      {% endfor %}
+    </div>
+  {% endfor %}
+  <p class="ajuda">A hora de término é calculada pela duração do serviço.</p>
+  <button type="submit">Agendar</button>
+</form>
+
+<dialog id="modal-confirmacao">
+  <h2>Confirmar agendamento</h2>
+  <p>Confira antes de agendar:</p>
+  <table>
+    <tr><th>Serviço</th><td id="resumo-servico"></td></tr>
+    <tr><th>Profissional</th><td id="resumo-profissional"></td></tr>
+    <tr><th>Local</th><td id="resumo-sala"></td></tr>
+    <tr><th>Equipamento</th><td id="resumo-recurso"></td></tr>
+    <tr><th>Data</th><td id="resumo-data"></td></tr>
+    <tr><th>Horário</th><td id="resumo-hora"></td></tr>
+  </table>
+  <p>
+    <button type="button" id="botao-confirmar">Confirmar</button>
+    <button type="button" id="botao-voltar">Voltar</button>
+  </p>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Mostra o resumo do agendamento antes de enviar o formulário (#22).
+  (function () {
+    const form = document.getElementById("form-agendamento");
+    const modal = document.getElementById("modal-confirmacao");
+    if (!form || !modal || typeof modal.showModal !== "function") {
+      return;  // sem suporte a <dialog>: o formulário envia direto
+    }
+
+    const textoDoCampo = function (nome, vazio) {
+      const campo = form.elements[nome];
+      if (!campo || !campo.value) {
+        return vazio;
+      }
+      if (campo.tagName === "SELECT") {
+        return campo.options[campo.selectedIndex].text;
+      }
+      return campo.value;
+    };
+
+    let confirmado = false;
+
+    form.addEventListener("submit", function (evento) {
+      if (confirmado || !form.checkValidity()) {
+        return;
+      }
+      evento.preventDefault();
+      document.getElementById("resumo-servico").textContent = textoDoCampo("servico", "-");
+      document.getElementById("resumo-profissional").textContent = textoDoCampo("profissional", "-");
+      document.getElementById("resumo-sala").textContent = textoDoCampo("sala", "Sem sala");
+      document.getElementById("resumo-recurso").textContent = textoDoCampo("recurso", "Sem equipamento");
+      document.getElementById("resumo-data").textContent = textoDoCampo("data", "-");
+      document.getElementById("resumo-hora").textContent = textoDoCampo("hora_inicio", "-");
+      modal.showModal();
+    });
+
+    document.getElementById("botao-confirmar").addEventListener("click", function () {
+      confirmado = true;
+      modal.close();
+      form.submit();
+    });
+
+    document.getElementById("botao-voltar").addEventListener("click", function () {
+      modal.close();
+    });
+  })();
+</script>
 {% endblock %}
