@@ -1,0 +1,28 @@
+{% extends "agendamento/base.html" %}
+{% block title %}Agendar {{ servico.nome }}{% endblock %}
+{% block content %}
+  <h1>Agendar serviço</h1>
+  <p><strong>Profissional:</strong> {{ profissional.nome }}</p>
+  <p><strong>Serviço:</strong> {{ servico.nome }} · {{ servico.duracao_minutos }} min</p>
+  {% if form.fields.horario.choices %}
+    <form method="post">
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <div class="error" role="alert">{{ form.non_field_errors }}</div>
+      {% endif %}
+      <div class="field">
+        <label for="{{ form.horario.id_for_label }}">{{ form.horario.label }}</label>
+        {{ form.horario }}
+        {% if form.horario.errors %}
+          <div class="error" role="alert">{{ form.horario.errors }}</div>
+        {% endif %}
+      </div>
+      <button type="submit">Confirmar agendamento</button>
+    </form>
+  {% else %}
+    <p class="muted">Não há horários livres para este serviço nos próximos 30 dias.</p>
+  {% endif %}
+  <nav class="options" aria-label="Navegação do agendamento">
+    <a href="{% url 'profissional_detail' profissional.pk %}">Voltar ao perfil</a>
+  </nav>
+{% endblock %}
