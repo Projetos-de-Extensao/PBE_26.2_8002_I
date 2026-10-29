@@ -1,0 +1,30 @@
+{% extends "agenda/base.html" %}
+
+{% block titulo %}Novo agendamento{% endblock %}
+
+{% block conteudo %}
+<div class="cartao">
+  <h1>Novo agendamento</h1>
+
+  {% if form.non_field_errors %}
+    {% for erro in form.non_field_errors %}
+      <div class="aviso erro">{{ erro }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <form method="post">
+    {% csrf_token %}
+    {% for campo in form %}
+      <div class="campo">
+        <label for="{{ campo.id_for_label }}">{{ campo.label }}</label>
+        {{ campo }}
+        {% for erro in campo.errors %}
+          <div class="aviso erro">{{ erro }}</div>
+        {% endfor %}
+      </div>
+    {% endfor %}
+    <p class="ajuda">A hora de término é calculada pela duração do serviço.</p>
+    <button type="submit">Agendar</button>
+  </form>
+</div>
+{% endblock %}
