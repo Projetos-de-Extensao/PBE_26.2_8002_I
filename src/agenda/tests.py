@@ -5,7 +5,15 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 
-from .models import Agendamento, Profissional, Recurso, Sala
+from .models import (
+    Agendamento,
+    Bloqueio,
+    Disponibilidade,
+    Profissional,
+    Recurso,
+    Sala,
+    horarios_livres,
+)
 
 
 class SalaTests(TestCase):
@@ -49,6 +57,14 @@ class AgendamentoTests(TestCase):
             usuario=User.objects.create_user("prof2", password="x"),
             especialidade="PERSONAL",
         )
+        dia_semana = date(2026, 11, 3).weekday()
+        for profissional in (self.prof, self.prof2):
+            Disponibilidade.objects.create(
+                profissional=profissional,
+                dia_semana=dia_semana,
+                hora_inicio=time(8),
+                hora_fim=time(20),
+            )
 
     def criar(self, cliente=None, profissional=None, inicio=time(9), fim=time(10), **kw):
         return Agendamento.objects.create(
@@ -100,3 +116,176 @@ class AgendamentoTests(TestCase):
         ag = self.criar()
         ag.observacao = "ok"
         ag.save()
+
+    def test_horario_fora_da_faixa_recusado(self):
+        with self.assertRaises(ValidationError):
+            self.criar(inicio=time(7), fim=time(8))
+
+    def test_horario_dentro_da_faixa_aceito(self):
+        ag = self.criar(inicio=time(8), fim=time(9))
+        self.assertEqual(ag.status, "AGENDADO")
+
+    def test_sem_disponibilidade_cadastrada_recusa(self):
+        Disponibilidade.objects.filter(profissional=self.prof).delete()
+        with self.assertRaises(ValidationError):
+            self.criar()
+
+    def test_bloqueio_esconde_horario(self):
+        Bloqueio.objects.create(
+            profissional=self.prof,
+            data=date(2026, 11, 3),
+            hora_inicio=time(9),
+            hora_fim=time(10),
+            motivo="Consulta médica",
+        )
+        with self.assertRaises(ValidationError):
+            self.criar(inicio=time(9, 30), fim=time(10, 30))
+
+
+class DisponibilidadeTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.prof = Profissional.objects.create(
+            usuario=User.objects.create_user("prof1", password="x"),
+            especialidade="NUTRICIONISTA",
+        )
+
+    def test_hora_fim_deve_ser_posterior(self):
+        with self.assertRaises(ValidationError):
+            Disponibilidade.objects.create(
+                profissional=self.prof,
+                dia_semana=0,
+                hora_inicio=time(10),
+                hora_fim=time(9),
+            )
+
+    def test_str(self):
+        faixa = Disponibilidade.objects.create(
+            profissional=self.prof, dia_semana=0, hora_inicio=time(8), hora_fim=time(18)
+        )
+        self.assertIn("Segunda-feira", str(faixa))
+
+
+class BloqueioTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.cliente = User.objects.create_user("cliente1", password="x")
+        self.prof = Profissional.objects.create(
+            usuario=User.objects.create_user("prof1", password="x"),
+            especialidade="NUTRICIONISTA",
+        )
+        Disponibilidade.objects.create(
+            profissional=self.prof, dia_semana=1, hora_inicio=time(8), hora_fim=time(18)
+        )
+
+    def test_hora_fim_deve_ser_posterior(self):
+        with self.assertRaises(ValidationError):
+            Bloqueio.objects.create(
+                profissional=self.prof,
+                data=date(2026, 11, 3),
+                hora_inicio=time(10),
+                hora_fim=time(9),
+            )
+
+    def test_agendamentos_afetados_lista_atendimentos_confirmados(self):
+        agendamento = Agendamento.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico="Consulta",
+            data=date(2026, 11, 3),
+            hora_inicio=time(9),
+            hora_fim=time(10),
+        )
+        bloqueio = Bloqueio(
+            profissional=self.prof,
+            data=date(2026, 11, 3),
+            hora_inicio=time(8),
+            hora_fim=time(12),
+            motivo="Férias",
+        )
+        self.assertIn(agendamento, bloqueio.agendamentos_afetados())
+
+    def test_agendamentos_afetados_ignora_outro_dia(self):
+        quarta = date(2026, 11, 4)
+        Disponibilidade.objects.create(
+            profissional=self.prof,
+            dia_semana=quarta.weekday(),
+            hora_inicio=time(8),
+            hora_fim=time(18),
+        )
+        Agendamento.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico="Consulta",
+            data=quarta,
+            hora_inicio=time(9),
+            hora_fim=time(10),
+        )
+        bloqueio = Bloqueio(
+            profissional=self.prof,
+            data=date(2026, 11, 3),
+            hora_inicio=time(8),
+            hora_fim=time(12),
+            motivo="Férias",
+        )
+        self.assertEqual(bloqueio.agendamentos_afetados().count(), 0)
+
+
+class HorariosLivresTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.cliente = User.objects.create_user("cliente1", password="x")
+        self.prof = Profissional.objects.create(
+            usuario=User.objects.create_user("prof1", password="x"),
+            especialidade="NUTRICIONISTA",
+        )
+        self.terca = date(2026, 11, 3)
+        self.assertEqual(self.terca.weekday(), 1)
+        Disponibilidade.objects.create(
+            profissional=self.prof, dia_semana=1, hora_inicio=time(8), hora_fim=time(10)
+        )
+
+    def test_sem_ocupacao_devolve_todas_as_faixas(self):
+        livres = horarios_livres(self.prof, self.terca, duracao_minutos=30)
+        self.assertEqual(
+            livres, [time(8), time(8, 30), time(9), time(9, 30)]
+        )
+
+    def test_bloqueio_esconde_horario(self):
+        Bloqueio.objects.create(
+            profissional=self.prof,
+            data=self.terca,
+            hora_inicio=time(9),
+            hora_fim=time(9, 30),
+            motivo="Almoço",
+        )
+        livres = horarios_livres(self.prof, self.terca, duracao_minutos=30)
+        self.assertNotIn(time(9), livres)
+
+    def test_bloqueio_nao_atrapalha_outro_dia(self):
+        quarta = date(2026, 11, 4)
+        Disponibilidade.objects.create(
+            profissional=self.prof, dia_semana=2, hora_inicio=time(8), hora_fim=time(10)
+        )
+        Bloqueio.objects.create(
+            profissional=self.prof,
+            data=self.terca,
+            hora_inicio=time(8),
+            hora_fim=time(10),
+            motivo="Férias",
+        )
+        livres = horarios_livres(self.prof, quarta, duracao_minutos=30)
+        self.assertEqual(livres, [time(8), time(8, 30), time(9), time(9, 30)])
+
+    def test_atendimento_confirmado_esconde_horario(self):
+        Agendamento.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico="Consulta",
+            data=self.terca,
+            hora_inicio=time(8),
+            hora_fim=time(9),
+        )
+        livres = horarios_livres(self.prof, self.terca, duracao_minutos=30)
+        self.assertNotIn(time(8), livres)
+        self.assertNotIn(time(8, 30), livres)
