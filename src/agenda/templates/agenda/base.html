@@ -1,73 +1,40 @@
-{% load static %}<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-br">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block titulo %}Agendamento{% endblock %}</title>
-  <style>
-    :root {
-      --fundo: #f5f6f8;
-      --cartao: #ffffff;
-      --texto: #1f2430;
-      --borda: #d8dce4;
-      --destaque: #2f5fe0;
-      --erro: #b3261e;
-      --erro-fundo: #fdecea;
-      --ok: #1b7f4b;
-      --ok-fundo: #e8f5ee;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      padding: 24px 16px;
-      background: var(--fundo);
-      color: var(--texto);
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    }
-    .pagina { max-width: 560px; margin: 0 auto; }
-    .cartao {
-      background: var(--cartao);
-      border: 1px solid var(--borda);
-      border-radius: 10px;
-      padding: 24px;
-    }
-    h1 { font-size: 1.4rem; margin: 0 0 20px; }
-    label { display: block; font-weight: 600; margin-bottom: 6px; font-size: .9rem; }
-    .campo { margin-bottom: 16px; }
-    input, select {
-      width: 100%;
-      padding: 10px;
-      border: 1px solid var(--borda);
-      border-radius: 6px;
-      font-size: 1rem;
-      background: #fff;
-      color: var(--texto);
-    }
-    button {
-      padding: 11px 18px;
-      border: 0;
-      border-radius: 6px;
-      background: var(--destaque);
-      color: #fff;
-      font-size: 1rem;
-      cursor: pointer;
-    }
-    button.secundario { background: #e3e6ec; color: var(--texto); }
-    .aviso { padding: 12px; border-radius: 6px; margin-bottom: 16px; font-size: .95rem; }
-    .aviso.erro { background: var(--erro-fundo); color: var(--erro); }
-    .aviso.ok { background: var(--ok-fundo); color: var(--ok); }
-    .ajuda { font-size: .85rem; color: #5a6072; margin-top: -8px; margin-bottom: 16px; }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Agenda{% endblock %}</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 2rem; color: #222; }
+  nav a { margin-right: 1rem; }
+  table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+  th, td { border: 1px solid #ccc; padding: 0.5rem; text-align: left; }
+  .erro { color: #b00020; }
+  .acoes form { display: inline; }
+  dialog { border: none; border-radius: 6px; padding: 1.5rem; min-width: 320px; }
+  dialog::backdrop { background: rgba(0, 0, 0, 0.4); }
+  .campo { margin-bottom: 0.75rem; }
+  .campo label { display: block; margin-bottom: 0.25rem; }
+  fieldset { margin-top: 1.5rem; }
+  .aviso { padding: .7rem; border-radius: 4px; margin-bottom: 1rem; }
+  .aviso.erro { background: #fdecea; color: #b00020; }
+  .aviso.ok { background: #e8f5ee; color: #1b7f4b; }
+  .ajuda { font-size: .85rem; color: #5a6072; }
+</style>
 </head>
 <body>
-  <div class="pagina">
-    {% if messages %}
-      {% for m in messages %}
-        <div class="aviso {% if m.tags == 'success' %}ok{% else %}erro{% endif %}">{{ m }}</div>
-      {% endfor %}
-    {% endif %}
-    {% block conteudo %}{% endblock %}
-  </div>
-  {% block scripts %}{% endblock %}
+<nav>
+  <a href="{% url 'agenda:novo_agendamento' %}">Novo agendamento</a>
+  <a href="{% url 'agenda:painel_profissional' %}">Painel do profissional</a>
+  <a href="{% url 'agenda:disponibilidade_bloqueio' %}">Disponibilidade e bloqueios</a>
+</nav>
+<hr>
+{% if messages %}
+  {% for m in messages %}
+    <div class="aviso {% if m.tags == 'success' %}ok{% else %}erro{% endif %}">{{ m }}</div>
+  {% endfor %}
+{% endif %}
+{% block conteudo %}{% endblock %}
+{% block scripts %}{% endblock %}
 </body>
 </html>

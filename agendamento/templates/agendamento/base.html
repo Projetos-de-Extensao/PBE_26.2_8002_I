@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="pt-br">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Agendamento{% endblock %}</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: system-ui, sans-serif;
+        color: #172033;
+        background: #f3f5f9;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        display: grid;
+        min-height: 100vh;
+        margin: 0;
+        padding: 1.5rem;
+        place-items: center;
+      }
+
+      main {
+        width: min(100%, 26rem);
+        padding: 2.5rem;
+        border: 1px solid #e1e6ef;
+        border-radius: 1rem;
+        background: #fff;
+        box-shadow: 0 1rem 2.5rem #17203312;
+      }
+
+      main.wide {
+        width: min(100%, 56rem);
+      }
+
+      .filters-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+        gap: 1rem;
+      }
+
+      h1 {
+        margin: 0 0 1.75rem;
+        font-size: 1.75rem;
+      }
+
+      h2 {
+        margin: 0 0 0.75rem;
+        font-size: 1.2rem;
+      }
+
+      section + section {
+        margin-top: 2rem;
+      }
+
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+        gap: 1rem;
+      }
+
+      .card {
+        padding: 1.25rem;
+        border: 1px solid #e1e6ef;
+        border-radius: 0.75rem;
+      }
+
+      .card h2 {
+        margin-bottom: 0.4rem;
+      }
+
+      .muted {
+        color: #687386;
+      }
+
+      .slots,
+      .availability {
+        margin: 0;
+        padding-left: 1.25rem;
+      }
+
+      .slots li,
+      .availability li {
+        margin: 0.35rem 0;
+      }
+
+      .field {
+        margin-bottom: 1.25rem;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 0.45rem;
+        font-weight: 600;
+      }
+
+      input,
+      select {
+        width: 100%;
+        padding: 0.75rem 0.85rem;
+        border: 1px solid #b9c3d2;
+        border-radius: 0.5rem;
+        font: inherit;
+      }
+
+      input:focus-visible,
+      button:focus-visible,
+      a:focus-visible {
+        outline: 3px solid #9db8ff;
+        outline-offset: 2px;
+      }
+
+      button {
+        width: 100%;
+        margin-top: 0.25rem;
+        padding: 0.8rem;
+        border: 0;
+        border-radius: 0.5rem;
+        background: #2457c5;
+        color: #fff;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .error,
+      .notice {
+        margin: 0 0 1.25rem;
+        padding: 0.8rem;
+        border-radius: 0.5rem;
+      }
+
+      .error {
+        border: 1px solid #e6a3a3;
+        background: #fff1f1;
+        color: #8d1d1d;
+      }
+
+      .notice {
+        border: 1px solid #a6d8b5;
+        background: #effaf2;
+        color: #205b32;
+      }
+
+      .error ul {
+        margin: 0;
+        padding-left: 1.25rem;
+      }
+
+      .options {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-top: 1.25rem;
+        font-size: 0.9rem;
+      }
+
+      .options a {
+        color: #2457c5;
+      }
+
+      .text-link {
+        display: inline-block;
+        margin-top: 0.75rem;
+        color: #2457c5;
+        font-weight: 600;
+      }
+
+      .success {
+        margin: 0;
+      }
+
+      @media (max-width: 24rem) {
+        main {
+          padding: 1.5rem;
+        }
+
+        .options {
+          flex-direction: column;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="{% block main_class %}{% endblock %}">
+      {% for message in messages %}
+        <div class="notice" role="status">{{ message }}</div>
+      {% endfor %}
+      {% block content %}{% endblock %}
+    </main>
+  </body>
+</html>
