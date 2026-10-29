@@ -2,6 +2,7 @@ from datetime import datetime, time, timedelta
 
 from django import forms
 from django.contrib import messages
+from django.contrib.auth import login
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView as DjangoLoginView
@@ -14,7 +15,7 @@ from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.views import View
-from django.views.generic import DetailView, FormView, ListView
+from django.views.generic import DetailView, FormView, ListView, TemplateView
 
 from agendamento.models import (
     Agendamento,
@@ -170,6 +171,7 @@ class EmailAuthenticationForm(AuthenticationForm):
 class LoginView(DjangoLoginView):
     authentication_form = EmailAuthenticationForm
     template_name = "agendamento/login.html"
+    next_page = reverse_lazy("inicio")
 
 
 class CadastroForm(forms.Form):
@@ -275,15 +277,32 @@ class CadastroForm(forms.Form):
 class CadastroView(FormView):
     form_class = CadastroForm
     template_name = "agendamento/cadastro.html"
-    success_url = reverse_lazy("login")
+    success_url = reverse_lazy("inicio")
 
     def form_valid(self, form):
-        form.save()
+        usuario = form.save()
+        login(self.request, usuario)
         messages.success(
             self.request,
-            _("Conta criada com sucesso. Entre com seu e-mail e senha."),
+            _("Conta criada com sucesso."),
         )
         return super().form_valid(form)
+
+
+class InicioView(LoginRequiredMixin, TemplateView):
+    template_name = "agendamento/inicio.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        perfil = self.request.user.perfil
+        context["papel"] = perfil.get_papel_display()
+        context["eh_cliente"] = perfil.papel == Perfil.Papel.CLIENTE
+        context["pode_administrar"] = (
+            perfil.papel == Perfil.Papel.ADMINISTRADOR
+            and self.request.user.is_active
+            and self.request.user.is_staff
+        )
+        return context
 
 
 class UsuarioPerfilForm(forms.ModelForm):
@@ -328,7 +347,7 @@ class PerfilEdicaoView(LoginRequiredMixin, View):
         if form.is_valid():
             form.save()
             messages.success(request, _("Perfil atualizado com sucesso."))
-            return HttpResponseRedirect(reverse("login"))
+            return HttpResponseRedirect(reverse("inicio"))
         return self.render_form(request, form)
 
 
