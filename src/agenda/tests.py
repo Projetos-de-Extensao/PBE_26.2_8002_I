@@ -662,7 +662,18 @@ class RecorrenciaGeracaoOcorrenciasTests(TestCase):
             recurso=self.maca,
         )
         self.assertEqual(rec.agendamentos.count(), 5)
-        for ag in rec.agendamentos.all():
+        agendamentos = list(rec.agendamentos.order_by("data", "hora_inicio"))
+        self.assertEqual(
+            [ag.data for ag in agendamentos],
+            [
+                date(2026, 11, 2),
+                date(2026, 11, 4),
+                date(2026, 11, 9),
+                date(2026, 11, 11),
+                date(2026, 11, 16),
+            ],
+        )
+        for ag in agendamentos:
             self.assertEqual(ag.recorrencia, rec)
             self.assertEqual(ag.hora_inicio, time(9))
             self.assertEqual(ag.hora_fim, time(10))
@@ -670,6 +681,7 @@ class RecorrenciaGeracaoOcorrenciasTests(TestCase):
             self.assertEqual(ag.profissional, self.prof)
             self.assertEqual(ag.sala, self.sala)
             self.assertEqual(ag.recurso, self.maca)
+            self.assertEqual(ag.servico, self.servico)
             self.assertTrue(ag.eh_recorrente)
 
     def test_gerar_ocorrencias_sem_salvar(self):
@@ -1438,3 +1450,88 @@ class CancelamentoAgendamentoTests(TestCase):
         self.assertContains(resposta, 'id="bloco-escopo-recorrencia"')
         self.assertContains(resposta, 'name="escopo" value="sessao"')
         self.assertContains(resposta, 'name="escopo" value="serie"')
+
+
+class ReagendamentoAgendamentoTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.cliente = User.objects.create_user("cliente_reag", password="123")
+        self.cliente2 = User.objects.create_user("cliente_reag2", password="123")
+        self.prof = Profissional.objects.create(
+            usuario=User.objects.create_user("prof_reag", password="x"),
+            especialidade="PERSONAL",
+        )
+        for dia in range(7):
+            Disponibilidade.objects.create(
+                profissional=self.prof,
+                dia_semana=dia,
+                hora_inicio=time(8),
+                hora_fim=time(18),
+            )
+        self.servico = Servico.objects.create(
+            profissional=self.prof, nome="Treino", duracao_minutos=60
+        )
+        self.sala = Sala.objects.create(nome="Sala Reagendamento")
+        self.recurso = Recurso.objects.create(nome="Bicicleta Reagendamento")
+        self.data = date(2026, 11, 10)
+        self.agendamento = Agendamento.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            sala=self.sala,
+            recurso=self.recurso,
+            data=self.data,
+            hora_inicio=time(9),
+            hora_fim=time(10),
+        )
+        self.client.login(username="cliente_reag", password="123")
+
+    def test_reagendar_libera_horario_antigo_e_reserva_o_novo_com_recursos(self):
+        url = reverse(
+            "agenda:reagendar_agendamento", args=[self.agendamento.pk]
+        )
+
+        resposta = self.client.post(
+            url,
+            {"data": self.data.isoformat(), "hora_inicio": "11:00"},
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta.json()["hora_inicio"], "11:00")
+        self.agendamento.refresh_from_db()
+        self.assertEqual(self.agendamento.data, self.data)
+        self.assertEqual(self.agendamento.hora_inicio, time(11))
+        self.assertEqual(self.agendamento.hora_fim, time(12))
+        self.assertEqual(self.agendamento.status, "AGENDADO")
+        self.assertEqual(self.agendamento.sala, self.sala)
+        self.assertEqual(self.agendamento.recurso, self.recurso)
+
+        horarios = horarios_livres(self.prof, self.data, duracao_minutos=60)
+        self.assertIn(time(9), horarios)
+        self.assertNotIn(time(11), horarios)
+
+        # O horário e os recursos anteriores podem ser usados por outro cliente.
+        reserva_antiga = Agendamento.objects.create(
+            cliente=self.cliente2,
+            profissional=self.prof,
+            servico=self.servico,
+            sala=self.sala,
+            recurso=self.recurso,
+            data=self.data,
+            hora_inicio=time(9),
+            hora_fim=time(10),
+        )
+        self.assertEqual(reserva_antiga.status, "AGENDADO")
+
+        # A nova data/hora continua ocupada pelo agendamento remarcado.
+        with self.assertRaises(ValidationError):
+            Agendamento.objects.create(
+                cliente=self.cliente2,
+                profissional=self.prof,
+                servico=self.servico,
+                sala=self.sala,
+                recurso=self.recurso,
+                data=self.data,
+                hora_inicio=time(11),
+                hora_fim=time(12),
+            )
