@@ -37,6 +37,7 @@
       <th>Profissional</th>
       <th>Local</th>
       <th>Status</th>
+      <th>Ações</th>
     </tr>
   </thead>
   <tbody>
@@ -44,10 +45,31 @@
     <tr>
       <td>{{ agendamento.data|date:"d/m/Y" }}</td>
       <td>{{ agendamento.hora_inicio|time:"H:i" }} - {{ agendamento.hora_fim|time:"H:i" }}</td>
-      <td>{{ agendamento.servico|default:"Atendimento" }}</td>
+      <td>
+        {{ agendamento.servico|default:"Atendimento" }}
+        {% if agendamento.eh_recorrente %}
+          <small style="display: block; color: #5a6072;">(Série recorrente)</small>
+        {% endif %}
+      </td>
       <td>{{ agendamento.profissional }}</td>
       <td>{{ agendamento.sala.nome|default:"-" }}</td>
       <td>{{ agendamento.get_status_display }}</td>
+      <td class="acoes">
+        {% if agendamento.status != "CANCELADO" %}
+          <button type="button"
+                  class="botao-abrir-cancelamento"
+                  data-id="{{ agendamento.pk }}"
+                  data-servico="{{ agendamento.servico|default:'Atendimento' }}"
+                  data-profissional="{{ agendamento.profissional }}"
+                  data-data="{{ agendamento.data|date:'d/m/Y' }}"
+                  data-horario="{{ agendamento.hora_inicio|time:'H:i' }} - {{ agendamento.hora_fim|time:'H:i' }}"
+                  data-recorrente="{% if agendamento.eh_recorrente %}1{% else %}0{% endif %}">
+            Cancelar
+          </button>
+        {% else %}
+          <span style="color: #999; font-size: 0.85rem;">Cancelado</span>
+        {% endif %}
+      </td>
     </tr>
     {% endfor %}
   </tbody>
@@ -59,5 +81,103 @@
 <p style="margin-top: 1.5rem;">
   <a href="{% url 'agenda:novo_agendamento' %}"><button type="button">Novo agendamento</button></a>
 </p>
+
+<!-- Modal de confirmação de cancelamento (RF11, RN10, Issue #50) -->
+<dialog id="modal-cancelamento">
+  <form method="post" id="form-cancelamento" action="">
+    {% csrf_token %}
+    <input type="hidden" name="origem" value="{{ request.get_full_path }}">
+    <h2>Confirmar cancelamento</h2>
+    <p>Tem certeza de que deseja cancelar este atendimento?</p>
+    
+    <div style="background: #f8f9fa; border: 1px solid #ddd; border-radius: 4px; padding: 0.8rem; margin: 1rem 0;">
+      <p style="margin: 0.2rem 0;"><strong>Serviço:</strong> <span id="cancelar-servico"></span></p>
+      <p style="margin: 0.2rem 0;"><strong>Profissional:</strong> <span id="cancelar-profissional"></span></p>
+      <p style="margin: 0.2rem 0;"><strong>Data:</strong> <span id="cancelar-data"></span></p>
+      <p style="margin: 0.2rem 0;"><strong>Horário:</strong> <span id="cancelar-horario"></span></p>
+    </div>
+
+    <!-- Opções de escopo exibidas apenas se for atendimento recorrente -->
+    <div id="bloco-escopo-recorrencia" style="margin: 1rem 0; padding: 0.8rem; background: #fff8f0; border-left: 4px solid #f0ad4e; border-radius: 4px; display: none;">
+      <p style="margin-top: 0; font-weight: bold;">Este atendimento faz parte de uma série recorrente:</p>
+      <div style="margin-bottom: 0.4rem;">
+        <label style="cursor: pointer;">
+          <input type="radio" name="escopo" value="sessao" id="escopo-sessao" checked>
+          <strong>Cancelar somente esta sessão</strong> (as demais semanas continuam agendadas)
+        </label>
+      </div>
+      <div>
+        <label style="cursor: pointer;">
+          <input type="radio" name="escopo" value="serie" id="escopo-serie">
+          <strong>Cancelar todas as sessões da série</strong> (cancela todas as sessões ativas da recorrência)
+        </label>
+      </div>
+    </div>
+
+    <p class="ajuda">Ao confirmar, o horário, a sala e o equipamento serão liberados imediatamente para novos agendamentos.</p>
+
+    <div style="margin-top: 1.2rem;">
+      <button type="submit" style="background-color: #b00020; color: #fff; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer;">
+        Confirmar cancelamento
+      </button>
+      <button type="button" id="botao-fechar-cancelamento" style="margin-left: 0.5rem;">
+        Voltar
+      </button>
+    </div>
+  </form>
+</dialog>
 {% endblock %}
 
+{% block scripts %}
+<script>
+  (function () {
+    const modal = document.getElementById("modal-cancelamento");
+    const form = document.getElementById("form-cancelamento");
+    const blocoRecorrencia = document.getElementById("bloco-escopo-recorrencia");
+    const btnFechar = document.getElementById("botao-fechar-cancelamento");
+    const urlBaseCancelar = "{% url 'agenda:cancelar_agendamento' 0 %}";
+
+    if (!modal || typeof modal.showModal !== "function") {
+      return;
+    }
+
+    document.querySelectorAll(".botao-abrir-cancelamento").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const id = this.dataset.id;
+        const servico = this.dataset.servico;
+        const profissional = this.dataset.profissional;
+        const data = this.dataset.data;
+        const horario = this.dataset.horario;
+        const ehRecorrente = this.dataset.recorrente === "1";
+
+        document.getElementById("cancelar-servico").textContent = servico;
+        document.getElementById("cancelar-profissional").textContent = profissional;
+        document.getElementById("cancelar-data").textContent = data;
+        document.getElementById("cancelar-horario").textContent = horario;
+
+        // Atualiza a URL do formulário com o ID do agendamento
+        form.action = urlBaseCancelar.replace("/0/", "/" + id + "/");
+
+        // Controla a exibição das opções de escopo
+        if (ehRecorrente) {
+          blocoRecorrencia.style.display = "block";
+          document.getElementById("escopo-sessao").checked = true;
+        } else {
+          blocoRecorrencia.style.display = "none";
+          // Garante escopo de sessão única para agendamento convencional
+          const inputSessao = document.getElementById("escopo-sessao");
+          if (inputSessao) inputSessao.checked = true;
+        }
+
+        modal.showModal();
+      });
+    });
+
+    if (btnFechar) {
+      btnFechar.addEventListener("click", function () {
+        modal.close();
+      });
+    }
+  })();
+</script>
+{% endblock %}

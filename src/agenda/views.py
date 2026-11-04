@@ -61,6 +61,56 @@ def agenda_cliente(request):
 
 
 @login_required
+def cancelar_agendamento(request, pk):
+    """Cancela um agendamento individual ou toda a série recorrente (RF11, RN10).
+
+    Permissões: o usuário autenticado deve ser o cliente do agendamento ou
+    o profissional responsável (ou recepcionista/staff).
+    Escopo:
+    - 'sessao': cancela somente a sessão específica (padrão).
+    - 'serie': cancela todas as sessões ativas da recorrência associada.
+    """
+    agendamento = get_object_or_404(Agendamento, pk=pk)
+
+    # Verifica se o usuário tem permissão para cancelar
+    eh_cliente = agendamento.cliente_id == request.user.pk
+    eh_profissional = (
+        hasattr(agendamento.profissional, "usuario_id")
+        and agendamento.profissional.usuario_id == request.user.pk
+    )
+    if not (eh_cliente or eh_profissional or request.user.is_staff):
+        messages.error(request, "Você não tem permissão para cancelar este agendamento.")
+        return redirect("agenda:agenda_cliente")
+
+    if request.method != "POST":
+        return redirect("agenda:agenda_cliente")
+
+    if agendamento.status == "CANCELADO":
+        messages.info(request, "Este atendimento já está cancelado.")
+        return redirect(request.POST.get("origem") or "agenda:agenda_cliente")
+
+    escopo = request.POST.get("escopo", "sessao")
+    origem = request.POST.get("origem") or reverse("agenda:agenda_cliente")
+
+    if escopo == "serie" and agendamento.recorrencia:
+        total = agendamento.recorrencia.cancelar()
+        messages.success(
+            request,
+            f"Série de atendimentos cancelada com sucesso ({total} sessões canceladas). "
+            "Os horários e recursos foram liberados.",
+        )
+    else:
+        agendamento.status = "CANCELADO"
+        agendamento.save()
+        messages.success(
+            request,
+            "Atendimento cancelado com sucesso. O horário, a sala e o equipamento foram liberados.",
+        )
+
+    return redirect(origem)
+
+
+@login_required
 def painel_profissional(request):
     """Agenda do profissional logado por dia, com acesso rápido ao bloqueio de horário (RF18)."""
     profissional = get_object_or_404(Profissional, usuario=request.user)

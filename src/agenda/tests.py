@@ -1237,3 +1237,204 @@ class AgendaClienteViewTests(TestCase):
         self.client.login(username="cliente_agenda", password="123")
         resposta = self.client.get(self.url)
         self.assertContains(resposta, "Nenhum atendimento encontrado")
+
+
+class CancelamentoAgendamentoTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.cliente = User.objects.create_user("cliente_canc", password="123")
+        self.cliente2 = User.objects.create_user("cliente_canc2", password="123")
+        self.prof = Profissional.objects.create(
+            usuario=User.objects.create_user("prof_canc", password="x"),
+            especialidade="PERSONAL",
+        )
+        for dia in range(7):
+            Disponibilidade.objects.create(
+                profissional=self.prof,
+                dia_semana=dia,
+                hora_inicio=time(8),
+                hora_fim=time(18),
+            )
+        self.servico = Servico.objects.create(
+            profissional=self.prof, nome="Treino", duracao_minutos=60
+        )
+        self.sala = Sala.objects.create(nome="Sala Funcional")
+        self.recurso = Recurso.objects.create(nome="Halteres", exclusivo=True)
+
+    def test_exige_login_para_cancelar(self):
+        ag = Agendamento.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            data=date(2026, 11, 10),
+            hora_inicio=time(9),
+            hora_fim=time(10),
+        )
+        url = reverse("agenda:cancelar_agendamento", args=[ag.pk])
+        resposta = self.client.post(url, {})
+        self.assertEqual(resposta.status_code, 302)
+        ag.refresh_from_db()
+        self.assertEqual(ag.status, "AGENDADO")
+
+    def test_outro_cliente_nao_pode_cancelar(self):
+        ag = Agendamento.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            data=date(2026, 11, 10),
+            hora_inicio=time(9),
+            hora_fim=time(10),
+        )
+        url = reverse("agenda:cancelar_agendamento", args=[ag.pk])
+        self.client.login(username="cliente_canc2", password="123")
+        resposta = self.client.post(url, {}, follow=True)
+        self.assertEqual(resposta.status_code, 200)
+        ag.refresh_from_db()
+        self.assertEqual(ag.status, "AGENDADO")
+        self.assertContains(resposta, "não tem permissão")
+
+    def test_cancelar_agendamento_individual_libera_horario_e_recursos(self):
+        ag = Agendamento.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            sala=self.sala,
+            recurso=self.recurso,
+            data=date(2026, 11, 10),
+            hora_inicio=time(9),
+            hora_fim=time(10),
+        )
+        url = reverse("agenda:cancelar_agendamento", args=[ag.pk])
+        self.client.login(username="cliente_canc", password="123")
+
+        # Antes do cancelamento, outro cliente não consegue agendar no mesmo horário (RN01, RN03, RN04)
+        with self.assertRaises(ValidationError):
+            Agendamento.objects.create(
+                cliente=self.cliente2,
+                profissional=self.prof,
+                servico=self.servico,
+                sala=self.sala,
+                recurso=self.recurso,
+                data=date(2026, 11, 10),
+                hora_inicio=time(9),
+                hora_fim=time(10),
+            )
+
+        # Executa cancelamento
+        resposta = self.client.post(url, {"escopo": "sessao"}, follow=True)
+        self.assertEqual(resposta.status_code, 200)
+
+        ag.refresh_from_db()
+        self.assertEqual(ag.status, "CANCELADO")
+
+        # Após o cancelamento, o horário, sala e recurso estão livres imediatamente (RN10)
+        novo_ag = Agendamento.objects.create(
+            cliente=self.cliente2,
+            profissional=self.prof,
+            servico=self.servico,
+            sala=self.sala,
+            recurso=self.recurso,
+            data=date(2026, 11, 10),
+            hora_inicio=time(9),
+            hora_fim=time(10),
+        )
+        self.assertEqual(novo_ag.status, "AGENDADO")
+
+    def test_cancelamento_recorrente_somente_esta_sessao(self):
+        rec = Recorrencia.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            sala=self.sala,
+            recurso=self.recurso,
+            dias_semana=[1],  # Terças-feiras
+            data_inicio=date(2026, 11, 3),
+            data_fim=date(2026, 11, 17),
+            hora_inicio=time(9),
+        )
+        # Deve ter gerado 3 ocorrências: 03/11, 10/11, 17/11
+        self.assertEqual(rec.agendamentos.count(), 3)
+        ag_alvo = rec.agendamentos.get(data=date(2026, 11, 10))
+
+        url = reverse("agenda:cancelar_agendamento", args=[ag_alvo.pk])
+        self.client.login(username="cliente_canc", password="123")
+        resposta = self.client.post(url, {"escopo": "sessao"}, follow=True)
+        self.assertEqual(resposta.status_code, 200)
+
+        # Apenas a sessão de 10/11 foi cancelada
+        ag_alvo.refresh_from_db()
+        self.assertEqual(ag_alvo.status, "CANCELADO")
+
+        # As demais sessões da série continuam intactas e ativas
+        ag_03 = rec.agendamentos.get(data=date(2026, 11, 3))
+        ag_17 = rec.agendamentos.get(data=date(2026, 11, 17))
+        self.assertEqual(ag_03.status, "AGENDADO")
+        self.assertEqual(ag_17.status, "AGENDADO")
+
+        # O horário do dia 10/11 foi liberado para outro cliente
+        novo_ag = Agendamento.objects.create(
+            cliente=self.cliente2,
+            profissional=self.prof,
+            servico=self.servico,
+            sala=self.sala,
+            recurso=self.recurso,
+            data=date(2026, 11, 10),
+            hora_inicio=time(9),
+            hora_fim=time(10),
+        )
+        self.assertEqual(novo_ag.status, "AGENDADO")
+
+    def test_cancelamento_recorrente_toda_a_serie(self):
+        rec = Recorrencia.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            sala=self.sala,
+            recurso=self.recurso,
+            dias_semana=[1],
+            data_inicio=date(2026, 11, 3),
+            data_fim=date(2026, 11, 17),
+            hora_inicio=time(9),
+        )
+        ag_alvo = rec.agendamentos.get(data=date(2026, 11, 10))
+
+        url = reverse("agenda:cancelar_agendamento", args=[ag_alvo.pk])
+        self.client.login(username="cliente_canc", password="123")
+        resposta = self.client.post(url, {"escopo": "serie"}, follow=True)
+        self.assertEqual(resposta.status_code, 200)
+
+        # Todas as ocorrências da série devem ter ficado CANCELADO
+        for ag in rec.agendamentos.all():
+            self.assertEqual(ag.status, "CANCELADO")
+
+        # Todos os horários da série foram liberados
+        for d in [date(2026, 11, 3), date(2026, 11, 10), date(2026, 11, 17)]:
+            livre = Agendamento.objects.create(
+                cliente=self.cliente2,
+                profissional=self.prof,
+                servico=self.servico,
+                sala=self.sala,
+                recurso=self.recurso,
+                data=d,
+                hora_inicio=time(9),
+                hora_fim=time(10),
+            )
+            self.assertEqual(livre.status, "AGENDADO")
+
+    def test_template_agenda_cliente_contem_modal_e_botoes(self):
+        ag_simples = Agendamento.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            data=date(2026, 11, 10),
+            hora_inicio=time(9),
+            hora_fim=time(10),
+        )
+        self.client.login(username="cliente_canc", password="123")
+        resposta = self.client.get(reverse("agenda:agenda_cliente"))
+
+        self.assertContains(resposta, 'id="modal-cancelamento"')
+        self.assertContains(resposta, 'class="botao-abrir-cancelamento"')
+        self.assertContains(resposta, 'id="bloco-escopo-recorrencia"')
+        self.assertContains(resposta, 'name="escopo" value="sessao"')
+        self.assertContains(resposta, 'name="escopo" value="serie"')
