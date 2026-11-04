@@ -1,8 +1,9 @@
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -108,6 +109,147 @@ def cancelar_agendamento(request, pk):
         )
 
     return redirect(origem)
+
+
+@login_required
+def horarios_reagendamento(request, pk):
+    """Retorna os horários disponíveis para reagendamento de um atendimento (RF12, Issue #51).
+
+    Recebe via GET o parâmetro `data` (YYYY-MM-DD) e devolve JSON com os slots
+    livres do profissional naquela data, excluindo o próprio agendamento da consulta
+    de ocupação para que o horário atual apareça como disponível.
+    """
+    agendamento = get_object_or_404(Agendamento, pk=pk)
+
+    eh_cliente = agendamento.cliente_id == request.user.pk
+    eh_profissional = (
+        hasattr(agendamento.profissional, "usuario_id")
+        and agendamento.profissional.usuario_id == request.user.pk
+    )
+    if not (eh_cliente or eh_profissional or request.user.is_staff):
+        return JsonResponse({"erro": "Sem permissão."}, status=403)
+
+    if agendamento.status == "CANCELADO":
+        return JsonResponse({"erro": "Atendimento já cancelado."}, status=400)
+
+    data_str = request.GET.get("data", "").strip()
+    if not data_str:
+        return JsonResponse({"erro": "Informe a data (parâmetro 'data')."}, status=400)
+
+    try:
+        data = date.fromisoformat(data_str)
+    except ValueError:
+        return JsonResponse({"erro": "Formato de data inválido. Use YYYY-MM-DD."}, status=400)
+
+    profissional = agendamento.profissional
+    duracao = agendamento.servico.duracao_minutos if agendamento.servico else 30
+
+    # Calcula os horários livres excluindo o próprio agendamento da lista de ocupados,
+    # para que o horário atual figure como disponível ao cliente.
+
+    faixas = Disponibilidade.objects.filter(
+        profissional=profissional, dia_semana=data.weekday()
+    ).order_by("hora_inicio")
+
+    duracao_td = timedelta(minutes=duracao)
+
+    ocupados = [
+        (b.hora_inicio, b.hora_fim)
+        for b in Bloqueio.objects.filter(profissional=profissional, data=data)
+    ]
+    ocupados += [
+        (a.hora_inicio, a.hora_fim)
+        for a in Agendamento.objects.filter(
+            profissional=profissional, data=data
+        ).exclude(status="CANCELADO").exclude(pk=agendamento.pk)
+    ]
+
+    livres = []
+    for faixa in faixas:
+        cursor = datetime.combine(data, faixa.hora_inicio)
+        fim_faixa = datetime.combine(data, faixa.hora_fim)
+        while cursor + duracao_td <= fim_faixa:
+            inicio_slot = cursor.time()
+            fim_slot = (cursor + duracao_td).time()
+            conflito = any(
+                inicio_slot < fim_ocu and fim_slot > ini_ocu
+                for ini_ocu, fim_ocu in ocupados
+            )
+            if not conflito:
+                livres.append(inicio_slot.strftime("%H:%M"))
+            cursor += duracao_td
+
+    return JsonResponse({
+        "horarios": livres,
+        "data": data_str,
+        "duracao_minutos": duracao,
+    })
+
+
+@login_required
+def reagendar_agendamento(request, pk):
+    """Reagenda um atendimento para uma nova data e horário (RF12, Issue #51).
+
+    Valida o novo horário contra todas as regras de negócio (RN01-RN05, RN13)
+    usando Agendamento.clean(). A alteração é atômica: o horário anterior só é
+    liberado quando o novo é confirmado com sucesso.
+    """
+    agendamento = get_object_or_404(Agendamento, pk=pk)
+
+    eh_cliente = agendamento.cliente_id == request.user.pk
+    eh_profissional = (
+        hasattr(agendamento.profissional, "usuario_id")
+        and agendamento.profissional.usuario_id == request.user.pk
+    )
+    if not (eh_cliente or eh_profissional or request.user.is_staff):
+        return JsonResponse({"erro": "Sem permissão."}, status=403)
+
+    if request.method != "POST":
+        return JsonResponse({"erro": "Método não permitido."}, status=405)
+
+    if agendamento.status == "CANCELADO":
+        return JsonResponse({"erro": "Não é possível reagendar um atendimento cancelado."}, status=400)
+
+    nova_data_str = request.POST.get("data", "").strip()
+    nova_hora_str = request.POST.get("hora_inicio", "").strip()
+
+    if not nova_data_str or not nova_hora_str:
+        return JsonResponse({"erro": "Informe a nova data e o novo horário."}, status=400)
+
+    try:
+        nova_data = date.fromisoformat(nova_data_str)
+    except ValueError:
+        return JsonResponse({"erro": "Formato de data inválido."}, status=400)
+
+    try:
+        nova_hora = time.fromisoformat(nova_hora_str)
+    except ValueError:
+        return JsonResponse({"erro": "Formato de horário inválido."}, status=400)
+
+    # Nenhuma alteração real
+    if nova_data == agendamento.data and nova_hora == agendamento.hora_inicio:
+        return JsonResponse({"erro": "O novo horário é idêntico ao atual."}, status=400)
+
+    try:
+        with transaction.atomic():
+            agendamento.data = nova_data
+            agendamento.hora_inicio = nova_hora
+            # Recalcula hora_fim com base na duração do serviço (RN07)
+            agendamento.hora_fim = agendamento._calcular_hora_fim()
+            # clean() aplica RN01-RN05 e RN13; exclude(pk=self.pk) já está no modelo,
+            # portanto o horário anterior é automaticamente liberado na consulta.
+            agendamento.clean()
+            agendamento.save()
+    except ValidationError as erro:
+        msg = " ".join(erro.messages) if hasattr(erro, "messages") else str(erro)
+        return JsonResponse({"erro": msg}, status=400)
+
+    return JsonResponse({
+        "ok": True,
+        "data": agendamento.data.strftime("%d/%m/%Y"),
+        "hora_inicio": agendamento.hora_inicio.strftime("%H:%M"),
+        "hora_fim": agendamento.hora_fim.strftime("%H:%M") if agendamento.hora_fim else "",
+    })
 
 
 @login_required

@@ -16,6 +16,16 @@ urlpatterns = [
         views.cancelar_agendamento,
         name="cancelar_agendamento",
     ),
+    path(
+        "agendamentos/<int:pk>/horarios/",
+        views.horarios_reagendamento,
+        name="horarios_reagendamento",
+    ),
+    path(
+        "agendamentos/<int:pk>/reagendar/",
+        views.reagendar_agendamento,
+        name="reagendar_agendamento",
+    ),
     path("minha-agenda/", views.agenda_cliente, name="agenda_cliente"),
     path("painel/", views.painel_profissional, name="painel_profissional"),
     path(
