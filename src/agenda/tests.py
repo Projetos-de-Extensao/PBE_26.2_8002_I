@@ -21,8 +21,8 @@ from .models import (
 
 class SalaTests(TestCase):
     def test_str_e_capacidade_padrao(self):
-        sala = Sala.objects.create(nome="EstÃºdio 1")
-        self.assertEqual(str(sala), "EstÃºdio 1")
+        sala = Sala.objects.create(nome="Estúdio 1")
+        self.assertEqual(str(sala), "Estúdio 1")
         self.assertEqual(sala.capacidade, 1)
 
     def test_capacidade_minima(self):
@@ -99,7 +99,7 @@ class AgendamentoTests(TestCase):
     def test_servico_duracao_minima(self):
         with self.assertRaises(ValidationError):
             Servico(
-                profissional=self.prof, nome="RÃ¡pido", duracao_minutos=0
+                profissional=self.prof, nome="Rápido", duracao_minutos=0
             ).full_clean()
 
     def test_hora_fim_calculada_pelo_servico(self):
@@ -225,7 +225,7 @@ class AgendamentoTests(TestCase):
             data=date(2026, 11, 3),
             hora_inicio=time(9),
             hora_fim=time(10),
-            motivo="Consulta mÃ©dica",
+            motivo="Consulta médica",
         )
         with self.assertRaises(ValidationError):
             self.criar(inicio=time(9, 30), fim=time(10, 30))
@@ -293,7 +293,7 @@ class BloqueioTests(TestCase):
             data=date(2026, 11, 3),
             hora_inicio=time(8),
             hora_fim=time(12),
-            motivo="FÃ©rias",
+            motivo="Férias",
         )
         self.assertIn(agendamento, bloqueio.agendamentos_afetados())
 
@@ -318,7 +318,7 @@ class BloqueioTests(TestCase):
             data=date(2026, 11, 3),
             hora_inicio=time(8),
             hora_fim=time(12),
-            motivo="FÃ©rias",
+            motivo="Férias",
         )
         self.assertEqual(bloqueio.agendamentos_afetados().count(), 0)
 
@@ -352,7 +352,7 @@ class HorariosLivresTests(TestCase):
             data=self.terca,
             hora_inicio=time(9),
             hora_fim=time(9, 30),
-            motivo="AlmoÃ§o",
+            motivo="Almoço",
         )
         livres = horarios_livres(self.prof, self.terca, duracao_minutos=30)
         self.assertNotIn(time(9), livres)
@@ -367,7 +367,7 @@ class HorariosLivresTests(TestCase):
             data=self.terca,
             hora_inicio=time(8),
             hora_fim=time(10),
-            motivo="FÃ©rias",
+            motivo="Férias",
         )
         livres = horarios_livres(self.prof, quarta, duracao_minutos=30)
         self.assertEqual(livres, [time(8), time(8, 30), time(9), time(9, 30)])
@@ -445,7 +445,7 @@ class NovoAgendamentoViewTests(TestCase):
         self.client.post(self.url, dados)
         resposta = self.client.post(self.url, dados)
         self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, "jÃ¡ possui um agendamento")
+        self.assertContains(resposta, "já possui um agendamento")
         self.assertContains(resposta, 'id="modal-conflito" data-abrir="1"')
         self.assertEqual(Agendamento.objects.count(), 1)
         sugestoes = resposta.context["sugestoes"]
@@ -459,7 +459,7 @@ class NovoAgendamentoViewTests(TestCase):
 
 
 class FixtureExemploTests(TestCase):
-    """Garante que os dados de demonstraÃ§Ã£o continuam carregando (#25)."""
+    """Garante que os dados de demonstração continuam carregando (#25)."""
 
     fixtures = ["exemplo.json"]
 
@@ -478,27 +478,6 @@ class FixtureExemploTests(TestCase):
         self.assertEqual(agendamento.recurso.nome, "Reformer")
 
 
-class CookiesDeSessaoTests(TestCase):
-    def setUp(self):
-        usuario = get_user_model().objects.create_user("prof1", password="x")
-        Profissional.objects.create(usuario=usuario, especialidade="PERSONAL")
-        self.client.force_login(usuario)
-
-    def test_renova_a_sessao_com_cookie_proprio_do_app(self):
-        response = self.client.get(reverse("agenda:painel_profissional"))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("agenda_sessionid", response.cookies)
-        self.assertNotIn("sessionid", response.cookies)
-        self.assertGreater(response.cookies["agenda_sessionid"]["max-age"], 0)
-
-    def test_nao_apaga_cookie_de_sessao_do_app_agendamento(self):
-        self.client.cookies["sessionid"] = "sessao-do-outro-app"
-
-        response = self.client.get(reverse("agenda:painel_profissional"))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertNotIn("sessionid", response.cookies)
 class RecorrenciaModelTests(TestCase):
     def setUp(self):
         User = get_user_model()
@@ -510,7 +489,7 @@ class RecorrenciaModelTests(TestCase):
         self.servico = Servico.objects.create(
             profissional=self.prof, nome="Personal 60min", duracao_minutos=60
         )
-        self.sala = Sala.objects.create(nome="EstÃºdio A")
+        self.sala = Sala.objects.create(nome="Estúdio A")
         self.recurso = Recurso.objects.create(nome="Kettlebell")
         for dia in range(7):
             Disponibilidade.objects.create(
@@ -732,7 +711,7 @@ class RecorrenciaGeracaoOcorrenciasTests(TestCase):
             data=date(2026, 11, 4),
             hora_inicio=time(9),
             hora_fim=time(11),
-            motivo="ReuniÃ£o",
+            motivo="Reunião",
         )
 
         rec = Recorrencia.objects.create(
@@ -1535,3 +1514,26 @@ class ReagendamentoAgendamentoTests(TestCase):
                 hora_inicio=time(11),
                 hora_fim=time(12),
             )
+
+
+class CookiesDeSessaoTests(TestCase):
+    def setUp(self):
+        usuario = get_user_model().objects.create_user("prof1", password="x")
+        Profissional.objects.create(usuario=usuario, especialidade="PERSONAL")
+        self.client.force_login(usuario)
+
+    def test_renova_a_sessao_com_cookie_proprio_do_app(self):
+        response = self.client.get(reverse("agenda:painel_profissional"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("agenda_sessionid", response.cookies)
+        self.assertNotIn("sessionid", response.cookies)
+        self.assertGreater(response.cookies["agenda_sessionid"]["max-age"], 0)
+
+    def test_nao_apaga_cookie_de_sessao_do_app_agendamento(self):
+        self.client.cookies["sessionid"] = "sessao-do-outro-app"
+
+        response = self.client.get(reverse("agenda:painel_profissional"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("sessionid", response.cookies)
