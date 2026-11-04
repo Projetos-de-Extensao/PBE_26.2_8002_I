@@ -475,3 +475,26 @@ class FixtureExemploTests(TestCase):
         agendamento = Agendamento.objects.get(pk=3)
         self.assertEqual(agendamento.sala.nome, "Sala de Pilates")
         self.assertEqual(agendamento.recurso.nome, "Reformer")
+
+
+class CookiesDeSessaoTests(TestCase):
+    def setUp(self):
+        usuario = get_user_model().objects.create_user("prof1", password="x")
+        Profissional.objects.create(usuario=usuario, especialidade="PERSONAL")
+        self.client.force_login(usuario)
+
+    def test_renova_a_sessao_com_cookie_proprio_do_app(self):
+        response = self.client.get(reverse("agenda:painel_profissional"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("agenda_sessionid", response.cookies)
+        self.assertNotIn("sessionid", response.cookies)
+        self.assertGreater(response.cookies["agenda_sessionid"]["max-age"], 0)
+
+    def test_nao_apaga_cookie_de_sessao_do_app_agendamento(self):
+        self.client.cookies["sessionid"] = "sessao-do-outro-app"
+
+        response = self.client.get(reverse("agenda:painel_profissional"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("sessionid", response.cookies)

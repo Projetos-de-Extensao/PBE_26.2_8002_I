@@ -77,6 +77,12 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
+        # A sessão é gravada a cada acesso; sem isso, duas requisições
+        # simultâneas podem dar "database is locked" (erro 500).
+        'OPTIONS': {
+            'timeout': 20,
+            'transaction_mode': 'IMMEDIATE',
+        },
     }
 }
 
@@ -121,6 +127,21 @@ STATIC_URL = 'static/'
 # que não existe neste projeto, e o usuário vê "página não encontrada".
 # A entrada é pelo admin enquanto a tela de login do app principal não existe.
 LOGIN_URL = '/admin/login/'
+
+
+# Sessão e cookies
+# O navegador separa cookies por host, não por porta. Com os nomes padrão
+# ("sessionid" e "csrftoken"), este app e o app agendamento (project/) rodando
+# em 127.0.0.1 apagam a sessão um do outro e invalidam o token CSRF de
+# formulários já abertos. Cada app usa nomes próprios.
+SESSION_COOKIE_NAME = 'agenda_sessionid'
+CSRF_COOKIE_NAME = 'agenda_csrftoken'
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 14
+# Renova a validade a cada acesso: quem está usando o sistema não é deslogado.
+SESSION_SAVE_EVERY_REQUEST = True
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'Lax'
 
 
 # Email

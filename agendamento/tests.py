@@ -71,6 +71,30 @@ class LoginViewTests(TestCase):
         self.assertRedirects(response, reverse("login"))
         self.assertNotIn("_auth_user_id", self.client.session)
 
+    def test_login_usa_cookie_proprio_do_app(self):
+        response = self.client.post(
+            reverse("login"),
+            {"username": self.usuario.email, "password": "senha-segura-123"},
+        )
+
+        self.assertIn("agendamento_sessionid", response.cookies)
+        self.assertNotIn("sessionid", response.cookies)
+
+    def test_nao_apaga_cookie_de_sessao_do_app_agenda(self):
+        self.client.cookies["sessionid"] = "sessao-do-outro-app"
+
+        response = self.client.get(reverse("login"))
+
+        self.assertNotIn("sessionid", response.cookies)
+
+    def test_renova_a_sessao_a_cada_acesso(self):
+        self.client.force_login(self.usuario)
+
+        response = self.client.get(reverse("login"))
+
+        self.assertIn("agendamento_sessionid", response.cookies)
+        self.assertGreater(response.cookies["agendamento_sessionid"]["max-age"], 0)
+
 
 @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
 class CadastroViewTests(TestCase):
