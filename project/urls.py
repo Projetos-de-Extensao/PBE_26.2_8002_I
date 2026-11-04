@@ -33,11 +33,13 @@ from agendamento.views import (
     ProfissionalDetailView,
     ProfissionalListView,
     CancelarAgendamentoView,
+    AdministracaoView,
 )
 from agendamento.admin_site import admin_site
 
 urlpatterns = [
     path("admin/", admin_site.urls),
+    path("administracao/", AdministracaoView.as_view(), name="administracao"),
     path("inicio/", HomeClienteView.as_view(), name="home_cliente"),
     path("", LoginView.as_view(), name="login"),
     path("cadastrar/", CadastroView.as_view(), name="cadastro"),

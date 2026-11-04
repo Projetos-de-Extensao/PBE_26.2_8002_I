@@ -23,7 +23,9 @@ from agendamento.models import (
     Disponibilidade,
     Perfil,
     Profissional,
+    Recurso,
     Recepcionista,
+    Sala,
     Servico,
     Usuario,
 )
@@ -360,6 +362,132 @@ class ProfissionalDetailView(DetailView):
             )
         context["servicos"] = servicos
         return context
+
+
+class ProfissionalAdminForm(forms.ModelForm):
+    password1 = forms.CharField(label=_("Senha"), widget=forms.PasswordInput)
+    password2 = forms.CharField(
+        label=_("Confirme a senha"), widget=forms.PasswordInput
+    )
+
+    class Meta:
+        model = Profissional
+        fields = ("email", "nome", "especialidade", "modalidade", "formacao", "apresentacao")
+
+    def clean(self):
+        cleaned_data = super().clean()
+        password1 = cleaned_data.get("password1")
+        password2 = cleaned_data.get("password2")
+        if password1 and password2 and password1 != password2:
+            self.add_error("password2", _("As senhas não coincidem."))
+        if password1:
+            try:
+                validate_password(password1, user=self.instance)
+            except ValidationError as error:
+                self.add_error("password1", error)
+        return cleaned_data
+
+    def save(self, commit=True):
+        profissional = super().save(commit=False)
+        profissional.set_password(self.cleaned_data["password1"])
+        if commit:
+            profissional.save()
+        return profissional
+
+
+class ProfissionalEdicaoForm(forms.ModelForm):
+    class Meta:
+        model = Profissional
+        fields = (
+            "email", "nome", "especialidade", "modalidade", "formacao",
+            "apresentacao", "is_active",
+        )
+
+
+class ServicoAdminForm(forms.ModelForm):
+    class Meta:
+        model = Servico
+        fields = ("profissional", "nome", "tipo", "duracao_minutos")
+
+
+class SalaAdminForm(forms.ModelForm):
+    class Meta:
+        model = Sala
+        fields = ("nome", "capacidade")
+
+
+class RecursoAdminForm(forms.ModelForm):
+    class Meta:
+        model = Recurso
+        fields = ("nome", "exclusivo")
+
+
+class AdministracaoView(LoginRequiredMixin, View):
+    template_name = "agendamento/administracao.html"
+    entidades = {
+        "profissionais": (Profissional, ProfissionalAdminForm, ProfissionalEdicaoForm),
+        "servicos": (Servico, ServicoAdminForm, ServicoAdminForm),
+        "salas": (Sala, SalaAdminForm, SalaAdminForm),
+        "recursos": (Recurso, RecursoAdminForm, RecursoAdminForm),
+    }
+
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return self.handle_no_permission()
+        if (
+            not request.user.is_active
+            or not request.user.is_staff
+            or not Perfil.objects.filter(
+                usuario_id=request.user.pk,
+                papel=Perfil.Papel.ADMINISTRADOR,
+            ).exists()
+        ):
+            return _acesso_negado(request)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self):
+        context = {
+            chave: model.objects.all()
+            for chave, (model, _, _) in self.entidades.items()
+        }
+        categoria = self.request.GET.get("categoria", "profissionais")
+        if categoria not in self.entidades:
+            categoria = "profissionais"
+        model, criar_form, editar_form = self.entidades[categoria]
+        objeto = None
+        pk = self.request.GET.get("editar")
+        if pk:
+            objeto = get_object_or_404(model, pk=pk)
+        form_class = editar_form if objeto else criar_form
+        context.update({
+            "categoria_ativa": categoria,
+            "objeto_editado": objeto,
+            "form": form_class(instance=objeto),
+        })
+        return context
+
+    def get(self, request, *args, **kwargs):
+        return render(request, self.template_name, self.get_context_data())
+
+    def post(self, request, *args, **kwargs):
+        categoria = request.POST.get("categoria", "")
+        if categoria not in self.entidades:
+            messages.error(request, _("Categoria administrativa inválida."))
+            return HttpResponseRedirect(reverse("administracao"))
+        model, criar_form, editar_form = self.entidades[categoria]
+        objeto = None
+        pk = request.POST.get("pk")
+        if pk:
+            objeto = get_object_or_404(model, pk=pk)
+        form_class = editar_form if objeto else criar_form
+        form = form_class(request.POST, instance=objeto)
+        if form.is_valid():
+            form.save()
+            messages.success(request, _("Registro salvo com sucesso."))
+            return HttpResponseRedirect(f"{reverse('administracao')}?categoria={categoria}")
+        context = self.get_context_data()
+        context.update({"categoria_ativa": categoria, "objeto_editado": objeto, "form": form})
+        return render(request, self.template_name, context, status=400)
 
 
 class AgendamentoForm(forms.Form):
