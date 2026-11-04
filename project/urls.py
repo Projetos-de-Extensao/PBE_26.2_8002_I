@@ -28,6 +28,7 @@ from agendamento.views import (
     AgendaClienteView,
     CadastroView,
     LoginView,
+    HomeClienteView,
     NovoAgendamentoView,
     ProfissionalDetailView,
     ProfissionalListView,
@@ -37,6 +38,7 @@ from agendamento.admin_site import admin_site
 
 urlpatterns = [
     path("admin/", admin_site.urls),
+    path("inicio/", HomeClienteView.as_view(), name="home_cliente"),
     path("", LoginView.as_view(), name="login"),
     path("cadastrar/", CadastroView.as_view(), name="cadastro"),
     path(

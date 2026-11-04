@@ -171,6 +171,14 @@ class LoginView(DjangoLoginView):
     authentication_form = EmailAuthenticationForm
     template_name = "agendamento/login.html"
 
+    def get_success_url(self):
+        if self.request.user.is_authenticated and Perfil.objects.filter(
+            usuario_id=self.request.user.pk,
+            papel=Perfil.Papel.CLIENTE,
+        ).exists():
+            return reverse_lazy("home_cliente")
+        return super().get_success_url()
+
 
 class CadastroForm(forms.Form):
     nome = forms.CharField(label=_("Nome completo"), max_length=150)
@@ -477,6 +485,26 @@ class AgendaClienteView(ClienteRoleRequiredMixin, ListView):
         context = super().get_context_data(**kwargs)
         context["now"] = timezone.now()
         return context
+
+
+class HomeClienteView(ClienteRoleRequiredMixin, ListView):
+    model = Agendamento
+    context_object_name = "agendamentos"
+    template_name = "agendamento/home_cliente.html"
+
+    def get_queryset(self):
+        return (
+            Agendamento.objects.filter(
+                cliente=self.cliente,
+                data_hora_inicio__gt=timezone.now(),
+                status__in=(
+                    Agendamento.Status.AGENDADO,
+                    Agendamento.Status.CONFIRMADO,
+                ),
+            )
+            .select_related("servico", "profissional")
+            .order_by("data_hora_inicio")[:5]
+        )
 
 
 class CancelarAgendamentoView(ClienteRoleRequiredMixin, View):
