@@ -11,6 +11,11 @@ urlpatterns = [
         views.previa_recorrencia,
         name="previa_recorrencia",
     ),
+    path(
+        "agendamentos/<int:pk>/cancelar/",
+        views.cancelar_agendamento,
+        name="cancelar_agendamento",
+    ),
     path("minha-agenda/", views.agenda_cliente, name="agenda_cliente"),
     path("painel/", views.painel_profissional, name="painel_profissional"),
     path(
