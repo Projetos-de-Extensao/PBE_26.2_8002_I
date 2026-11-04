@@ -1,0 +1,70 @@
+{% extends "agendamento/base.html" %}
+{% block title %}Administração | Agendamento{% endblock %}
+{% block main_class %}wide{% endblock %}
+{% block content %}
+  <h1>Administração</h1>
+  <p class="muted">Gerencie profissionais, serviços, salas e equipamentos.</p>
+
+  <nav class="admin-tabs" aria-label="Categorias administrativas">
+    <a href="?categoria=profissionais"{% if categoria_ativa == "profissionais" %} aria-current="page"{% endif %}>Profissionais</a>
+    <a href="?categoria=servicos"{% if categoria_ativa == "servicos" %} aria-current="page"{% endif %}>Serviços</a>
+    <a href="?categoria=salas"{% if categoria_ativa == "salas" %} aria-current="page"{% endif %}>Salas</a>
+    <a href="?categoria=recursos"{% if categoria_ativa == "recursos" %} aria-current="page"{% endif %}>Equipamentos</a>
+  </nav>
+
+  <section aria-labelledby="lista-heading">
+    <h2 id="lista-heading">
+      {% if categoria_ativa == "profissionais" %}Profissionais
+      {% elif categoria_ativa == "servicos" %}Serviços
+      {% elif categoria_ativa == "salas" %}Salas
+      {% else %}Equipamentos{% endif %}
+    </h2>
+    <div class="cards">
+      {% if categoria_ativa == "profissionais" %}
+        {% for item in profissionais %}
+          <article class="card"><h3>{{ item.nome }}</h3><p>{{ item.email }} · {{ item.especialidade }}</p><p>{{ item.get_modalidade_display }}{% if not item.is_active %} · Inativo{% endif %}</p><a class="text-link" href="?categoria=profissionais&amp;editar={{ item.pk }}">Editar</a></article>
+        {% empty %}<p class="muted">Nenhum profissional cadastrado.</p>{% endfor %}
+      {% elif categoria_ativa == "servicos" %}
+        {% for item in servicos %}
+          <article class="card"><h3>{{ item.nome }}</h3><p>{{ item.tipo }} · {{ item.duracao_minutos }} min</p><p>Profissional: {{ item.profissional.nome }}</p><a class="text-link" href="?categoria=servicos&amp;editar={{ item.pk }}">Editar</a></article>
+        {% empty %}<p class="muted">Nenhum serviço cadastrado.</p>{% endfor %}
+      {% elif categoria_ativa == "salas" %}
+        {% for item in salas %}
+          <article class="card"><h3>{{ item.nome }}</h3><p>Capacidade: {{ item.capacidade }} pessoas</p><a class="text-link" href="?categoria=salas&amp;editar={{ item.pk }}">Editar</a></article>
+        {% empty %}<p class="muted">Nenhuma sala cadastrada.</p>{% endfor %}
+      {% else %}
+        {% for item in recursos %}
+          <article class="card"><h3>{{ item.nome }}</h3><p>{% if item.exclusivo %}Exclusivo{% else %}Compartilhado{% endif %}</p><a class="text-link" href="?categoria=recursos&amp;editar={{ item.pk }}">Editar</a></article>
+        {% empty %}<p class="muted">Nenhum equipamento cadastrado.</p>{% endfor %}
+      {% endif %}
+    </div>
+  </section>
+
+  <section aria-labelledby="form-heading">
+    <h2 id="form-heading">{% if objeto_editado %}Editar registro{% else %}Cadastrar novo{% endif %}</h2>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="categoria" value="{{ categoria_ativa }}">
+      {% if objeto_editado %}<input type="hidden" name="pk" value="{{ objeto_editado.pk }}">{% endif %}
+      {% for field in form %}
+        <div class="field">
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {% if field.help_text %}<p class="muted">{{ field.help_text }}</p>{% endif %}
+          {% if field.errors %}<div class="error" role="alert">{{ field.errors }}</div>{% endif %}
+        </div>
+      {% endfor %}
+      {% if form.non_field_errors %}<div class="error" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+      <button type="submit">Salvar</button>
+      {% if objeto_editado %}<a class="text-link" href="?categoria={{ categoria_ativa }}">Cancelar edição</a>{% endif %}
+    </form>
+  </section>
+
+  <nav class="options" aria-label="Navegação administrativa">
+    <a href="{% url 'admin:index' %}">Administração avançada</a>
+    <form method="post" action="{% url 'logout' %}">
+      {% csrf_token %}
+      <button type="submit">Sair</button>
+    </form>
+  </nav>
+{% endblock %}
