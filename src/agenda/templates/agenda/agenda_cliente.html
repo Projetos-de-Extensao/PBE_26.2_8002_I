@@ -100,7 +100,7 @@
     <input type="hidden" name="origem" value="{{ request.get_full_path }}">
     <h2>Confirmar cancelamento</h2>
     <p>Tem certeza de que deseja cancelar este atendimento?</p>
-    
+
     <div style="background: #f8f9fa; border: 1px solid #ddd; border-radius: 4px; padding: 0.8rem; margin: 1rem 0;">
       <p style="margin: 0.2rem 0;"><strong>Serviço:</strong> <span id="cancelar-servico"></span></p>
       <p style="margin: 0.2rem 0;"><strong>Profissional:</strong> <span id="cancelar-profissional"></span></p>
@@ -386,7 +386,7 @@
               const colunas = linha.querySelectorAll("td");
               colunas[0].textContent = dados.data;
               colunas[1].textContent = dados.hora_inicio + " - " + dados.hora_fim;
-              
+
               // Atualiza data-attributes para nova abertura do modal
               const btnReag = linha.querySelector(".botao-abrir-reagendamento");
               if (btnReag) {
