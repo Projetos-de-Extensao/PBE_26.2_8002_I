@@ -23,6 +23,44 @@ from .models import (
 
 
 @login_required
+def agenda_cliente(request):
+    """Tela da agenda do cliente autenticado (RF17, Protótipo 08).
+
+    Exibe todos os atendimentos do cliente, com suporte a filtro por período
+    (data inicial e data final) e ordenação cronológica.
+    """
+    agendamentos = (
+        Agendamento.objects.filter(cliente=request.user)
+        .select_related("servico", "profissional", "profissional__usuario", "sala")
+        .order_by("data", "hora_inicio")
+    )
+
+    data_inicio_str = request.GET.get("data_inicio", "").strip()
+    data_fim_str = request.GET.get("data_fim", "").strip()
+
+    if data_inicio_str:
+        try:
+            data_inicio = date.fromisoformat(data_inicio_str)
+            agendamentos = agendamentos.filter(data__gte=data_inicio)
+        except ValueError:
+            pass
+
+    if data_fim_str:
+        try:
+            data_fim = date.fromisoformat(data_fim_str)
+            agendamentos = agendamentos.filter(data__lte=data_fim)
+        except ValueError:
+            pass
+
+    context = {
+        "agendamentos": agendamentos,
+        "data_inicio": data_inicio_str,
+        "data_fim": data_fim_str,
+    }
+    return render(request, "agenda/agenda_cliente.html", context)
+
+
+@login_required
 def painel_profissional(request):
     """Agenda do profissional logado por dia, com acesso rápido ao bloqueio de horário (RF18)."""
     profissional = get_object_or_404(Profissional, usuario=request.user)
