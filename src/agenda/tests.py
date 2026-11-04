@@ -1035,3 +1035,184 @@ class PreviaRecorrenciaViewTests(TestCase):
         self.assertContains(resposta, 'id="tabela-sessoes-recorrencia"')
         self.assertContains(resposta, 'id="botao-confirmar-recorrencia"')
         self.assertContains(resposta, 'id="botao-ver-previa"')
+
+
+class AgendaClienteViewTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.cliente = User.objects.create_user("cliente_agenda", password="123")
+        self.cliente2 = User.objects.create_user("cliente_outro", password="123")
+        self.prof = Profissional.objects.create(
+            usuario=User.objects.create_user("prof_agenda", password="x"),
+            especialidade="FISIOTERAPEUTA",
+        )
+        for dia in range(7):
+            Disponibilidade.objects.create(
+                profissional=self.prof,
+                dia_semana=dia,
+                hora_inicio=time(8),
+                hora_fim=time(18),
+            )
+        self.servico = Servico.objects.create(
+            profissional=self.prof, nome="Fisioterapia", duracao_minutos=60
+        )
+        self.sala = Sala.objects.create(nome="Consultório 1")
+        self.url = reverse("agenda:agenda_cliente")
+
+    def test_exige_autenticacao(self):
+        resposta = self.client.get(self.url)
+        self.assertEqual(resposta.status_code, 302)
+
+    def test_exibe_apenas_atendimentos_do_cliente_autenticado(self):
+        ag_cliente = Agendamento.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            sala=self.sala,
+            data=date(2026, 11, 10),
+            hora_inicio=time(9),
+            hora_fim=time(10),
+            status="CONFIRMADO",
+        )
+        ag_outro = Agendamento.objects.create(
+            cliente=self.cliente2,
+            profissional=self.prof,
+            servico=self.servico,
+            sala=self.sala,
+            data=date(2026, 11, 10),
+            hora_inicio=time(14),
+            hora_fim=time(15),
+            status="CONFIRMADO",
+        )
+
+        self.client.login(username="cliente_agenda", password="123")
+        resposta = self.client.get(self.url)
+        self.assertEqual(resposta.status_code, 200)
+
+        agendamentos = list(resposta.context["agendamentos"])
+        self.assertIn(ag_cliente, agendamentos)
+        self.assertNotIn(ag_outro, agendamentos)
+
+    def test_exibe_detalhes_do_atendimento(self):
+        Agendamento.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            sala=self.sala,
+            data=date(2026, 11, 10),
+            hora_inicio=time(16),
+            hora_fim=time(17),
+            status="CONFIRMADO",
+        )
+        self.client.login(username="cliente_agenda", password="123")
+        resposta = self.client.get(self.url)
+
+        self.assertContains(resposta, "10/11/2026")
+        self.assertContains(resposta, "16:00 - 17:00")
+        self.assertContains(resposta, "Fisioterapia")
+        self.assertContains(resposta, "prof_agenda")
+        self.assertContains(resposta, "Consultório 1")
+        self.assertContains(resposta, "Confirmado")
+
+    def test_filtro_por_periodo(self):
+        ag1 = Agendamento.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            data=date(2026, 11, 5),
+            hora_inicio=time(9),
+            hora_fim=time(10),
+        )
+        ag2 = Agendamento.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            data=date(2026, 11, 15),
+            hora_inicio=time(9),
+            hora_fim=time(10),
+        )
+        ag3 = Agendamento.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            data=date(2026, 11, 25),
+            hora_inicio=time(9),
+            hora_fim=time(10),
+        )
+
+        self.client.login(username="cliente_agenda", password="123")
+
+        # Filtro com data_inicio e data_fim
+        resposta = self.client.get(self.url, {
+            "data_inicio": "2026-11-10",
+            "data_fim": "2026-11-20",
+        })
+        agendamentos = list(resposta.context["agendamentos"])
+        self.assertEqual(agendamentos, [ag2])
+
+        # Apenas data_inicio
+        resposta = self.client.get(self.url, {
+            "data_inicio": "2026-11-15",
+        })
+        agendamentos = list(resposta.context["agendamentos"])
+        self.assertEqual(agendamentos, [ag2, ag3])
+
+        # Apenas data_fim
+        resposta = self.client.get(self.url, {
+            "data_fim": "2026-11-15",
+        })
+        agendamentos = list(resposta.context["agendamentos"])
+        self.assertEqual(agendamentos, [ag1, ag2])
+
+    def test_filtro_com_formato_invalido_ignorado(self):
+        ag = Agendamento.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            data=date(2026, 11, 10),
+            hora_inicio=time(9),
+            hora_fim=time(10),
+        )
+        self.client.login(username="cliente_agenda", password="123")
+        resposta = self.client.get(self.url, {
+            "data_inicio": "data-invalida",
+            "data_fim": "outra-invalida",
+        })
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(list(resposta.context["agendamentos"]), [ag])
+
+    def test_ordenacao_cronologica(self):
+        ag2 = Agendamento.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            data=date(2026, 11, 12),
+            hora_inicio=time(9),
+            hora_fim=time(10),
+        )
+        ag1 = Agendamento.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            data=date(2026, 11, 10),
+            hora_inicio=time(14),
+            hora_fim=time(15),
+        )
+        ag0 = Agendamento.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            data=date(2026, 11, 10),
+            hora_inicio=time(9),
+            hora_fim=time(10),
+        )
+
+        self.client.login(username="cliente_agenda", password="123")
+        resposta = self.client.get(self.url)
+        agendamentos = list(resposta.context["agendamentos"])
+        self.assertEqual(agendamentos, [ag0, ag1, ag2])
+
+    def test_mensagem_quando_vazio(self):
+        self.client.login(username="cliente_agenda", password="123")
+        resposta = self.client.get(self.url)
+        self.assertContains(resposta, "Nenhum atendimento encontrado")

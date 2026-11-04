@@ -1,0 +1,63 @@
+{% extends "agenda/base.html" %}
+
+{% block title %}Minha Agenda{% endblock %}
+
+{% block conteudo %}
+<h1>Minha Agenda</h1>
+
+<form method="get" class="filtro-periodo" style="margin-bottom: 1.5rem;">
+  <fieldset style="display: inline-block; padding: 0.8rem 1.2rem;">
+    <legend>Filtrar por período</legend>
+    <div style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+      <div class="campo" style="margin-bottom: 0;">
+        <label for="id_data_inicio">Data inicial</label>
+        <input type="date" name="data_inicio" id="id_data_inicio" value="{{ data_inicio }}">
+      </div>
+      <div class="campo" style="margin-bottom: 0;">
+        <label for="id_data_fim">Data final</label>
+        <input type="date" name="data_fim" id="id_data_fim" value="{{ data_fim }}">
+      </div>
+      <div>
+        <button type="submit">Filtrar</button>
+        {% if data_inicio or data_fim %}
+          <a href="{% url 'agenda:agenda_cliente' %}" style="margin-left: 0.5rem;">Limpar</a>
+        {% endif %}
+      </div>
+    </div>
+  </fieldset>
+</form>
+
+{% if agendamentos %}
+<table>
+  <thead>
+    <tr>
+      <th>Data</th>
+      <th>Horário</th>
+      <th>Serviço</th>
+      <th>Profissional</th>
+      <th>Local</th>
+      <th>Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for agendamento in agendamentos %}
+    <tr>
+      <td>{{ agendamento.data|date:"d/m/Y" }}</td>
+      <td>{{ agendamento.hora_inicio|time:"H:i" }} - {{ agendamento.hora_fim|time:"H:i" }}</td>
+      <td>{{ agendamento.servico|default:"Atendimento" }}</td>
+      <td>{{ agendamento.profissional }}</td>
+      <td>{{ agendamento.sala.nome|default:"-" }}</td>
+      <td>{{ agendamento.get_status_display }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>Nenhum atendimento encontrado para o período informado.</p>
+{% endif %}
+
+<p style="margin-top: 1.5rem;">
+  <a href="{% url 'agenda:novo_agendamento' %}"><button type="button">Novo agendamento</button></a>
+</p>
+{% endblock %}
+
