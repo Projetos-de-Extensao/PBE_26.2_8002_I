@@ -1,0 +1,421 @@
+{% extends "agenda/base.html" %}
+
+{% block title %}Minha Agenda{% endblock %}
+
+{% block conteudo %}
+<h1>Minha Agenda</h1>
+
+<form method="get" class="filtro-periodo" style="margin-bottom: 1.5rem;">
+  <fieldset style="display: inline-block; padding: 0.8rem 1.2rem;">
+    <legend>Filtrar por período</legend>
+    <div style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+      <div class="campo" style="margin-bottom: 0;">
+        <label for="id_data_inicio">Data inicial</label>
+        <input type="date" name="data_inicio" id="id_data_inicio" value="{{ data_inicio }}">
+      </div>
+      <div class="campo" style="margin-bottom: 0;">
+        <label for="id_data_fim">Data final</label>
+        <input type="date" name="data_fim" id="id_data_fim" value="{{ data_fim }}">
+      </div>
+      <div>
+        <button type="submit">Filtrar</button>
+        {% if data_inicio or data_fim %}
+          <a href="{% url 'agenda:agenda_cliente' %}" style="margin-left: 0.5rem;">Limpar</a>
+        {% endif %}
+      </div>
+    </div>
+  </fieldset>
+</form>
+
+{% if agendamentos %}
+<table>
+  <thead>
+    <tr>
+      <th>Data</th>
+      <th>Horário</th>
+      <th>Serviço</th>
+      <th>Profissional</th>
+      <th>Local</th>
+      <th>Status</th>
+      <th>Ações</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for agendamento in agendamentos %}
+    <tr>
+      <td>{{ agendamento.data|date:"d/m/Y" }}</td>
+      <td>{{ agendamento.hora_inicio|time:"H:i" }} - {{ agendamento.hora_fim|time:"H:i" }}</td>
+      <td>
+        {{ agendamento.servico|default:"Atendimento" }}
+        {% if agendamento.eh_recorrente %}
+          <small style="display: block; color: #5a6072;">(Série recorrente)</small>
+        {% endif %}
+      </td>
+      <td>{{ agendamento.profissional }}</td>
+      <td>{{ agendamento.sala.nome|default:"-" }}</td>
+      <td>{{ agendamento.get_status_display }}</td>
+      <td class="acoes">
+        {% if agendamento.status != "CANCELADO" %}
+          <button type="button"
+                  class="botao-abrir-cancelamento"
+                  data-id="{{ agendamento.pk }}"
+                  data-servico="{{ agendamento.servico|default:'Atendimento' }}"
+                  data-profissional="{{ agendamento.profissional }}"
+                  data-data="{{ agendamento.data|date:'d/m/Y' }}"
+                  data-horario="{{ agendamento.hora_inicio|time:'H:i' }} - {{ agendamento.hora_fim|time:'H:i' }}"
+                  data-recorrente="{% if agendamento.eh_recorrente %}1{% else %}0{% endif %}">
+            Cancelar
+          </button>
+          <button type="button"
+                  class="botao-abrir-reagendamento"
+                  data-id="{{ agendamento.pk }}"
+                  data-servico="{{ agendamento.servico|default:'Atendimento' }}"
+                  data-profissional="{{ agendamento.profissional }}"
+                  data-data="{{ agendamento.data|date:'d/m/Y' }}"
+                  data-data-iso="{{ agendamento.data|date:'Y-m-d' }}"
+                  data-horario="{{ agendamento.hora_inicio|time:'H:i' }} - {{ agendamento.hora_fim|time:'H:i' }}"
+                  style="margin-left: 0.4rem;">
+            Reagendar
+          </button>
+        {% else %}
+          <span style="color: #999; font-size: 0.85rem;">Cancelado</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>Nenhum atendimento encontrado para o período informado.</p>
+{% endif %}
+
+<p style="margin-top: 1.5rem;">
+  <a href="{% url 'agenda:novo_agendamento' %}"><button type="button">Novo agendamento</button></a>
+</p>
+
+<!-- Modal de confirmação de cancelamento (RF11, RN10, Issue #50) -->
+<dialog id="modal-cancelamento">
+  <form method="post" id="form-cancelamento" action="">
+    {% csrf_token %}
+    <input type="hidden" name="origem" value="{{ request.get_full_path }}">
+    <h2>Confirmar cancelamento</h2>
+    <p>Tem certeza de que deseja cancelar este atendimento?</p>
+
+    <div style="background: #f8f9fa; border: 1px solid #ddd; border-radius: 4px; padding: 0.8rem; margin: 1rem 0;">
+      <p style="margin: 0.2rem 0;"><strong>Serviço:</strong> <span id="cancelar-servico"></span></p>
+      <p style="margin: 0.2rem 0;"><strong>Profissional:</strong> <span id="cancelar-profissional"></span></p>
+      <p style="margin: 0.2rem 0;"><strong>Data:</strong> <span id="cancelar-data"></span></p>
+      <p style="margin: 0.2rem 0;"><strong>Horário:</strong> <span id="cancelar-horario"></span></p>
+    </div>
+
+    <!-- Opções de escopo exibidas apenas se for atendimento recorrente -->
+    <div id="bloco-escopo-recorrencia" style="margin: 1rem 0; padding: 0.8rem; background: #fff8f0; border-left: 4px solid #f0ad4e; border-radius: 4px; display: none;">
+      <p style="margin-top: 0; font-weight: bold;">Este atendimento faz parte de uma série recorrente:</p>
+      <div style="margin-bottom: 0.4rem;">
+        <label style="cursor: pointer;">
+          <input type="radio" name="escopo" value="sessao" id="escopo-sessao" checked>
+          <strong>Cancelar somente esta sessão</strong> (as demais semanas continuam agendadas)
+        </label>
+      </div>
+      <div>
+        <label style="cursor: pointer;">
+          <input type="radio" name="escopo" value="serie" id="escopo-serie">
+          <strong>Cancelar todas as sessões da série</strong> (cancela todas as sessões ativas da recorrência)
+        </label>
+      </div>
+    </div>
+
+    <p class="ajuda">Ao confirmar, o horário, a sala e o equipamento serão liberados imediatamente para novos agendamentos.</p>
+
+    <div style="margin-top: 1.2rem;">
+      <button type="submit" style="background-color: #b00020; color: #fff; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer;">
+        Confirmar cancelamento
+      </button>
+      <button type="button" id="botao-fechar-cancelamento" style="margin-left: 0.5rem;">
+        Voltar
+      </button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Modal de reagendamento (RF12, Issue #51) -->
+<dialog id="modal-reagendamento">
+  <h2>Reagendar atendimento</h2>
+
+  <div style="background: #f8f9fa; border: 1px solid #ddd; border-radius: 4px; padding: 0.8rem; margin-bottom: 1rem;">
+    <p style="margin: 0.2rem 0;"><strong>Serviço:</strong> <span id="reagendar-servico"></span></p>
+    <p style="margin: 0.2rem 0;"><strong>Profissional:</strong> <span id="reagendar-profissional"></span></p>
+    <p style="margin: 0.2rem 0;"><strong>Horário atual:</strong> <span id="reagendar-horario-atual"></span></p>
+  </div>
+
+  <div class="campo">
+    <label for="reagendar-data">Nova data</label>
+    <input type="date" id="reagendar-data" style="width: 100%;">
+  </div>
+
+  <div id="reagendar-bloco-horarios" style="display: none; margin-top: 0.5rem;">
+    <p style="margin-bottom: 0.4rem;"><strong>Horários disponíveis:</strong></p>
+    <div id="reagendar-lista-horarios" style="display: flex; flex-wrap: wrap; gap: 0.4rem;"></div>
+    <input type="hidden" id="reagendar-hora-selecionada">
+  </div>
+
+  <div id="reagendar-mensagem" style="display: none; margin-top: 0.5rem;" class="aviso"></div>
+
+  <div id="reagendar-carregando" style="display: none; margin-top: 0.5rem; color: #5a6072;">
+    Carregando horários...
+  </div>
+
+  <p class="ajuda" style="margin-top: 0.8rem;">Selecione uma data e escolha um dos horários disponíveis para confirmar o reagendamento.</p>
+
+  <div style="margin-top: 1.2rem;">
+    <button type="button" id="botao-confirmar-reagendamento"
+            style="background-color: #1b7f4b; color: #fff; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer;"
+            disabled>
+      Confirmar reagendamento
+    </button>
+    <button type="button" id="botao-fechar-reagendamento" style="margin-left: 0.5rem;">
+      Cancelar
+    </button>
+  </div>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function () {
+    const modal = document.getElementById("modal-cancelamento");
+    const form = document.getElementById("form-cancelamento");
+    const blocoRecorrencia = document.getElementById("bloco-escopo-recorrencia");
+    const btnFechar = document.getElementById("botao-fechar-cancelamento");
+    const urlBaseCancelar = "{% url 'agenda:cancelar_agendamento' 0 %}";
+
+    if (!modal || typeof modal.showModal !== "function") {
+      return;
+    }
+
+    document.querySelectorAll(".botao-abrir-cancelamento").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const id = this.dataset.id;
+        const servico = this.dataset.servico;
+        const profissional = this.dataset.profissional;
+        const data = this.dataset.data;
+        const horario = this.dataset.horario;
+        const ehRecorrente = this.dataset.recorrente === "1";
+
+        document.getElementById("cancelar-servico").textContent = servico;
+        document.getElementById("cancelar-profissional").textContent = profissional;
+        document.getElementById("cancelar-data").textContent = data;
+        document.getElementById("cancelar-horario").textContent = horario;
+
+        // Atualiza a URL do formulário com o ID do agendamento
+        form.action = urlBaseCancelar.replace("/0/", "/" + id + "/");
+
+        // Controla a exibição das opções de escopo
+        if (ehRecorrente) {
+          blocoRecorrencia.style.display = "block";
+          document.getElementById("escopo-sessao").checked = true;
+        } else {
+          blocoRecorrencia.style.display = "none";
+          // Garante escopo de sessão única para agendamento convencional
+          const inputSessao = document.getElementById("escopo-sessao");
+          if (inputSessao) inputSessao.checked = true;
+        }
+
+        modal.showModal();
+      });
+    });
+
+    if (btnFechar) {
+      btnFechar.addEventListener("click", function () {
+        modal.close();
+      });
+    }
+  })();
+</script>
+
+<script>
+  /* ── Modal de Reagendamento (RF12, Issue #51) ── */
+  (function () {
+    const modalReag = document.getElementById("modal-reagendamento");
+    if (!modalReag || typeof modalReag.showModal !== "function") return;
+
+    const inputData       = document.getElementById("reagendar-data");
+    const blocoHorarios  = document.getElementById("reagendar-bloco-horarios");
+    const listaHorarios  = document.getElementById("reagendar-lista-horarios");
+    const horaSelecionada= document.getElementById("reagendar-hora-selecionada");
+    const msgDiv         = document.getElementById("reagendar-mensagem");
+    const carregando     = document.getElementById("reagendar-carregando");
+    const btnConfirmar   = document.getElementById("botao-confirmar-reagendamento");
+    const btnFecharReag  = document.getElementById("botao-fechar-reagendamento");
+
+    const urlBaseHorarios   = "{% url 'agenda:horarios_reagendamento' 0 %}";
+    const urlBaseReagendar  = "{% url 'agenda:reagendar_agendamento' 0 %}";
+    const csrfToken         = document.querySelector("[name=csrfmiddlewaretoken]").value;
+
+    let agendamentoId = null;
+
+    function urlPara(base, id) {
+      return base.replace("/0/", "/" + id + "/");
+    }
+
+    function exibirMensagem(texto, tipo) {
+      msgDiv.textContent = texto;
+      msgDiv.className = "aviso " + (tipo === "erro" ? "erro" : "ok");
+      msgDiv.style.display = "block";
+    }
+
+    function ocultarMensagem() {
+      msgDiv.style.display = "none";
+    }
+
+    function resetarHorarios() {
+      listaHorarios.innerHTML = "";
+      horaSelecionada.value = "";
+      blocoHorarios.style.display = "none";
+      btnConfirmar.disabled = true;
+      ocultarMensagem();
+    }
+
+    function selecionarHorario(hora, botao) {
+      listaHorarios.querySelectorAll("button").forEach(function (b) {
+        b.style.background = "";
+        b.style.color = "";
+        b.style.fontWeight = "";
+      });
+      botao.style.background = "#1b7f4b";
+      botao.style.color = "#fff";
+      botao.style.fontWeight = "bold";
+      horaSelecionada.value = hora;
+      btnConfirmar.disabled = false;
+      ocultarMensagem();
+    }
+
+    function carregarHorarios(data) {
+      if (!data || !agendamentoId) return;
+      resetarHorarios();
+      carregando.style.display = "block";
+
+      const url = urlPara(urlBaseHorarios, agendamentoId) + "?data=" + data;
+      fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } })
+        .then(function (resp) { return resp.json(); })
+        .then(function (dados) {
+          carregando.style.display = "none";
+          if (dados.erro) {
+            exibirMensagem(dados.erro, "erro");
+            return;
+          }
+          if (!dados.horarios || dados.horarios.length === 0) {
+            exibirMensagem("Nenhum horário disponível para esta data.", "erro");
+            return;
+          }
+          blocoHorarios.style.display = "block";
+          dados.horarios.forEach(function (hora) {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.textContent = hora;
+            btn.style.cssText = "padding: 0.35rem 0.75rem; border: 1px solid #1b7f4b; border-radius: 4px; cursor: pointer; background: #fff; color: #1b7f4b;";
+            btn.addEventListener("click", function () { selecionarHorario(hora, btn); });
+            listaHorarios.appendChild(btn);
+          });
+        })
+        .catch(function () {
+          carregando.style.display = "none";
+          exibirMensagem("Erro ao buscar horários. Tente novamente.", "erro");
+        });
+    }
+
+    // Abre o modal ao clicar em "Reagendar"
+    document.querySelectorAll(".botao-abrir-reagendamento").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        agendamentoId = this.dataset.id;
+
+        document.getElementById("reagendar-servico").textContent = this.dataset.servico;
+        document.getElementById("reagendar-profissional").textContent = this.dataset.profissional;
+        document.getElementById("reagendar-horario-atual").textContent =
+          this.dataset.data + " — " + this.dataset.horario;
+
+        // Pré-preenche com a data atual do agendamento
+        inputData.value = this.dataset.dataIso || "";
+        resetarHorarios();
+
+        // Carrega horários para a data atual imediatamente
+        if (inputData.value) {
+          carregarHorarios(inputData.value);
+        }
+
+        modalReag.showModal();
+      });
+    });
+
+    // Recarrega horários ao trocar a data
+    inputData.addEventListener("change", function () {
+      carregarHorarios(this.value);
+    });
+
+    // Confirma o reagendamento via fetch (sem reload da página)
+    btnConfirmar.addEventListener("click", function () {
+      const novaData = inputData.value;
+      const novaHora = horaSelecionada.value;
+      if (!novaData || !novaHora) {
+        exibirMensagem("Selecione uma data e um horário antes de confirmar.", "erro");
+        return;
+      }
+
+      btnConfirmar.disabled = true;
+      ocultarMensagem();
+
+      const formData = new FormData();
+      formData.append("data", novaData);
+      formData.append("hora_inicio", novaHora);
+      formData.append("csrfmiddlewaretoken", csrfToken);
+
+      fetch(urlPara(urlBaseReagendar, agendamentoId), {
+        method: "POST",
+        body: formData,
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+      })
+        .then(function (resp) { return resp.json(); })
+        .then(function (dados) {
+          if (dados.ok) {
+            modalReag.close();
+            // Atualiza a linha da tabela sem recarregar a página
+            const linha = document.querySelector(
+              ".botao-abrir-reagendamento[data-id='" + agendamentoId + "']"
+            ).closest("tr");
+            if (linha) {
+              const colunas = linha.querySelectorAll("td");
+              colunas[0].textContent = dados.data;
+              colunas[1].textContent = dados.hora_inicio + " - " + dados.hora_fim;
+
+              // Atualiza data-attributes para nova abertura do modal
+              const btnReag = linha.querySelector(".botao-abrir-reagendamento");
+              if (btnReag) {
+                btnReag.dataset.data = dados.data;
+                btnReag.dataset.dataIso = novaData;
+                btnReag.dataset.horario = dados.hora_inicio + " - " + dados.hora_fim;
+              }
+              const btnCanc = linha.querySelector(".botao-abrir-cancelamento");
+              if (btnCanc) {
+                btnCanc.dataset.data = dados.data;
+                btnCanc.dataset.horario = dados.hora_inicio + " - " + dados.hora_fim;
+              }
+            }
+          } else {
+            exibirMensagem(dados.erro || "Erro ao reagendar. Tente novamente.", "erro");
+            btnConfirmar.disabled = false;
+          }
+        })
+        .catch(function () {
+          exibirMensagem("Erro de comunicação. Tente novamente.", "erro");
+          btnConfirmar.disabled = false;
+        });
+    });
+
+    if (btnFecharReag) {
+      btnFecharReag.addEventListener("click", function () {
+        modalReag.close();
+      });
+    }
+  })();
+</script>
+{% endblock %}
