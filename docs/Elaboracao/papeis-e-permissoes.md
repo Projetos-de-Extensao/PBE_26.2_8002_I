@@ -4,33 +4,66 @@ title: Papéis e Permissões
 
 # Papéis e permissões
 
-O acesso é definido pelo papel associado ao perfil de cada usuário (RN08). As
-permissões são verificadas no servidor, não apenas pela presença ou ausência de
-links na interface.
+Este documento define os papéis previstos para o sistema e as regras de acesso associadas a cada perfil. A ideia central é garantir que cada ação do sistema seja executada apenas por usuários com autorização adequada, conforme as regras de negócio RN08 e RN09.
 
-| Papel | Pode fazer | Limites |
+## Objetivo
+
+Estabelecer uma política clara de autorização para o sistema, separando responsabilidades entre cliente, profissional, recepcionista e administrador. As verificações de permissão devem ocorrer no backend, e não apenas na interface, para evitar acesso indevido por manipulação da tela.
+
+## Regras gerais
+
+- A autenticação é obrigatória para ações sensíveis.
+- As funções de administração exigem conta ativa e papel específico.
+- Usuários sem autorização adequada recebem resposta de acesso negado.
+- A navegação pública pode existir para informações abertas, mas qualquer ação de alteração ou gestão exige permissão explícita.
+
+## Matriz de papéis e permissões
+
+| Papel | Permissões principais | Limitações |
 |---|---|---|
-| Cliente | Pesquisar profissionais, consultar perfis, agendar, consultar e cancelar os próprios atendimentos, e editar o próprio nome e telefone. | Não acessa a agenda de outras pessoas nem o painel administrativo. |
-| Profissional | Ter o perfil público consultado e editar o próprio nome, telefone, especialidade e apresentação. | Não acessa a agenda de clientes nem gerencia cadastros administrativos. |
-| Recepcionista | Editar o próprio nome e telefone. | Não acessa o painel administrativo. As operações de agenda em nome de clientes previstas em RF25 ainda não estão disponíveis na aplicação. |
-| Administrador | Gerenciar usuários, papéis, profissionais, serviços, salas e equipamentos pelo painel administrativo. | O painel exige uma conta ativa, com acesso de equipe e papel de administrador (RN09). |
+| Cliente | Pesquisar profissionais, consultar perfis, visualizar o próprio histórico de atendimentos, solicitar e cancelar agendamentos próprios, editar os próprios dados básicos. | Não acessa agenda de terceiros, não gerencia profissionais, serviços, salas ou equipamentos, e não entra no painel administrativo. |
+| Profissional | Consultar o próprio perfil público, atualizar dados profissionais e de contato, responder a consultas, manter sua disponibilidade e agenda. | Não acessa dados de clientes em contexto administrativo nem realiza gestão de usuários e configuração do sistema. |
+| Recepcionista | Atualizar dados próprios, auxiliar no atendimento e acompanhar a agenda operacional. | Não acessa o painel administrativo completo. As operações de agenda em nome de clientes previstas em RF25 dependem de evolução da aplicação. |
+| Administrador | Gerenciar usuários, papéis, profissionais, serviços, salas, equipamentos e configurações do sistema pelo painel administrativo. | Requer conta ativa e autorização de equipe; o acesso administrativo não é concedido por simples cadastro no sistema. |
 
-As páginas de busca e de perfil público dos profissionais podem ser consultadas
-sem autenticação. Para ações protegidas, usuários sem o papel exigido recebem
-uma resposta de acesso negado; no painel administrativo, o controle também
-verifica se a conta está ativa e autorizada.
+## Permissões por contexto
 
-O painel de gestão em `/administracao/` permite cadastrar e editar profissionais,
-serviços, salas e equipamentos. Também resume os agendamentos do dia e a ocupação
-de salas e equipamentos. A gestão de contas e a atribuição de papéis estão
-disponíveis nos respectivos links do painel.
+### Acesso público
 
-Para criar contas locais de demonstração dos quatro papéis, execute
-`python manage.py criar_usuarios_demo`. O comando gera senhas aleatórias e
-mostra cada senha uma única vez no terminal; guarde-as com segurança. Ele cria
-as contas `cliente@gmail.com`, `profissional@gmail.com`,
-`recepcionista@gmail.com` e `admin@gmail.com`, não altera contas existentes e
-não deve ser usado para criar credenciais de produção.
+As páginas de busca e perfil público dos profissionais podem ser consultadas sem autenticação. Essa abertura serve para descoberta do serviço, mas não permite edição ou gerenciamento de dados privados.
+
+### Acesso autenticado
+
+Ações como agendamento, consulta de histórico, edição de perfil e organização de agenda exigem que o usuário esteja autenticado e tenha o papel adequado para a operação.
+
+### Acesso administrativo
+
+O painel de gestão em `/administracao/` permite:
+
+- cadastrar e editar profissionais;
+- cadastrar serviços, salas e equipamentos;
+- monitorar agendamentos do dia;
+- verificar ocupação dos recursos;
+- gerenciar contas e atribuição de papéis.
+
+A validação do admnistrador deve verificar, além do papel, a ativação da conta e a autorização de acesso à equipe.
+
+## Conta de demonstração
+
+Para criar contas locais de demonstração dos quatro papéis, execute:
+
+```bash
+python manage.py criar_usuarios_demo
+```
+
+Esse comando gera senhas aleatórias e as exibe uma única vez no terminal. As contas criadas são:
+
+- `cliente@gmail.com`
+- `profissional@gmail.com`
+- `recepcionista@gmail.com`
+- `admin@gmail.com`
+
+O comando não altera contas existentes e não deve ser usado em ambiente de produção.
 
 ## Referências
 
