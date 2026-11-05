@@ -1,0 +1,321 @@
+[
+{
+  "model": "auth.user",
+  "pk": 101,
+  "fields": {
+    "password": "!exemplo-sem-senha",
+    "is_superuser": false,
+    "username": "ana.cliente",
+    "first_name": "Ana",
+    "last_name": "Souza",
+    "email": "ana@exemplo.com",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-10-01T09:00:00Z"
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 102,
+  "fields": {
+    "password": "!exemplo-sem-senha",
+    "is_superuser": false,
+    "username": "bruno.cliente",
+    "first_name": "Bruno",
+    "last_name": "Lima",
+    "email": "bruno@exemplo.com",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-10-01T09:00:00Z"
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 103,
+  "fields": {
+    "password": "!exemplo-sem-senha",
+    "is_superuser": false,
+    "username": "carla.personal",
+    "first_name": "Carla",
+    "last_name": "Dias",
+    "email": "carla@exemplo.com",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-10-01T09:00:00Z"
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 104,
+  "fields": {
+    "password": "!exemplo-sem-senha",
+    "is_superuser": false,
+    "username": "diego.nutri",
+    "first_name": "Diego",
+    "last_name": "Alves",
+    "email": "diego@exemplo.com",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-10-01T09:00:00Z"
+  }
+},
+{
+  "model": "auth.user",
+  "pk": 105,
+  "fields": {
+    "password": "!exemplo-sem-senha",
+    "is_superuser": false,
+    "username": "elisa.fisio",
+    "first_name": "Elisa",
+    "last_name": "Prado",
+    "email": "elisa@exemplo.com",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-10-01T09:00:00Z"
+  }
+},
+{
+  "model": "agenda.sala",
+  "pk": 1,
+  "fields": {"nome": "Estúdio 1", "capacidade": 1}
+},
+{
+  "model": "agenda.sala",
+  "pk": 2,
+  "fields": {"nome": "Consultório 1", "capacidade": 1}
+},
+{
+  "model": "agenda.sala",
+  "pk": 3,
+  "fields": {"nome": "Sala de Pilates", "capacidade": 4}
+},
+{
+  "model": "agenda.recurso",
+  "pk": 1,
+  "fields": {"nome": "Maca", "exclusivo": true}
+},
+{
+  "model": "agenda.recurso",
+  "pk": 2,
+  "fields": {"nome": "Reformer", "exclusivo": true}
+},
+{
+  "model": "agenda.recurso",
+  "pk": 3,
+  "fields": {"nome": "Colchonete", "exclusivo": false}
+},
+{
+  "model": "agenda.profissional",
+  "pk": 1,
+  "fields": {
+    "usuario": 103,
+    "especialidade": "PERSONAL",
+    "registro_profissional": "CREF 012345-G/RJ",
+    "telefone": "(21) 99999-0001",
+    "modalidade": "PRESENCIAL",
+    "descricao": "Treino funcional e musculação.",
+    "ativo": true
+  }
+},
+{
+  "model": "agenda.profissional",
+  "pk": 2,
+  "fields": {
+    "usuario": 104,
+    "especialidade": "NUTRICIONISTA",
+    "registro_profissional": "CRN 54321",
+    "telefone": "(21) 99999-0002",
+    "modalidade": "HIBRIDO",
+    "descricao": "Avaliação e plano alimentar.",
+    "ativo": true
+  }
+},
+{
+  "model": "agenda.profissional",
+  "pk": 3,
+  "fields": {
+    "usuario": 105,
+    "especialidade": "FISIOTERAPEUTA",
+    "registro_profissional": "CREFITO 98765",
+    "telefone": "(21) 99999-0003",
+    "modalidade": "PRESENCIAL",
+    "descricao": "Reabilitação e pilates clínico.",
+    "ativo": true
+  }
+},
+{
+  "model": "agenda.servico",
+  "pk": 1,
+  "fields": {
+    "profissional": 1,
+    "nome": "Treino individual",
+    "duracao_minutos": 60,
+    "modalidade": "PRESENCIAL",
+    "ativo": true
+  }
+},
+{
+  "model": "agenda.servico",
+  "pk": 2,
+  "fields": {
+    "profissional": 1,
+    "nome": "Avaliação física",
+    "duracao_minutos": 30,
+    "modalidade": "PRESENCIAL",
+    "ativo": true
+  }
+},
+{
+  "model": "agenda.servico",
+  "pk": 3,
+  "fields": {
+    "profissional": 2,
+    "nome": "Consulta nutricional",
+    "duracao_minutos": 50,
+    "modalidade": "HIBRIDO",
+    "ativo": true
+  }
+},
+{
+  "model": "agenda.servico",
+  "pk": 4,
+  "fields": {
+    "profissional": 3,
+    "nome": "Sessão de fisioterapia",
+    "duracao_minutos": 45,
+    "modalidade": "PRESENCIAL",
+    "ativo": true
+  }
+},
+{
+  "model": "agenda.disponibilidade",
+  "pk": 1,
+  "fields": {"profissional": 1, "dia_semana": 0, "hora_inicio": "08:00:00", "hora_fim": "18:00:00"}
+},
+{
+  "model": "agenda.disponibilidade",
+  "pk": 2,
+  "fields": {"profissional": 1, "dia_semana": 2, "hora_inicio": "08:00:00", "hora_fim": "18:00:00"}
+},
+{
+  "model": "agenda.disponibilidade",
+  "pk": 3,
+  "fields": {"profissional": 1, "dia_semana": 4, "hora_inicio": "08:00:00", "hora_fim": "18:00:00"}
+},
+{
+  "model": "agenda.disponibilidade",
+  "pk": 4,
+  "fields": {"profissional": 2, "dia_semana": 1, "hora_inicio": "09:00:00", "hora_fim": "17:00:00"}
+},
+{
+  "model": "agenda.disponibilidade",
+  "pk": 5,
+  "fields": {"profissional": 2, "dia_semana": 3, "hora_inicio": "09:00:00", "hora_fim": "17:00:00"}
+},
+{
+  "model": "agenda.disponibilidade",
+  "pk": 6,
+  "fields": {"profissional": 3, "dia_semana": 1, "hora_inicio": "07:00:00", "hora_fim": "13:00:00"}
+},
+{
+  "model": "agenda.disponibilidade",
+  "pk": 7,
+  "fields": {"profissional": 3, "dia_semana": 3, "hora_inicio": "07:00:00", "hora_fim": "13:00:00"}
+},
+{
+  "model": "agenda.bloqueio",
+  "pk": 1,
+  "fields": {
+    "profissional": 1,
+    "data": "2026-11-04",
+    "hora_inicio": "12:00:00",
+    "hora_fim": "13:00:00",
+    "motivo": "Almoço"
+  }
+},
+{
+  "model": "agenda.agendamento",
+  "pk": 1,
+  "fields": {
+    "cliente": 101,
+    "profissional": 1,
+    "servico": 1,
+    "sala": 1,
+    "recurso": null,
+    "data": "2026-11-02",
+    "hora_inicio": "16:00:00",
+    "hora_fim": "17:00:00",
+    "status": "CONFIRMADO",
+    "observacao": "",
+    "criado_em": "2026-10-20T10:00:00Z"
+  }
+},
+{
+  "model": "agenda.agendamento",
+  "pk": 2,
+  "fields": {
+    "cliente": 101,
+    "profissional": 2,
+    "servico": 3,
+    "sala": 2,
+    "recurso": null,
+    "data": "2026-11-03",
+    "hora_inicio": "14:00:00",
+    "hora_fim": "14:50:00",
+    "status": "AGENDADO",
+    "observacao": "",
+    "criado_em": "2026-10-20T10:05:00Z"
+  }
+},
+{
+  "model": "agenda.agendamento",
+  "pk": 3,
+  "fields": {
+    "cliente": 101,
+    "profissional": 3,
+    "servico": 4,
+    "sala": 3,
+    "recurso": 2,
+    "data": "2026-11-05",
+    "hora_inicio": "10:00:00",
+    "hora_fim": "10:45:00",
+    "status": "AGENDADO",
+    "observacao": "Dor no ombro direito.",
+    "criado_em": "2026-10-20T10:10:00Z"
+  }
+},
+{
+  "model": "agenda.agendamento",
+  "pk": 4,
+  "fields": {
+    "cliente": 102,
+    "profissional": 1,
+    "servico": 2,
+    "sala": 1,
+    "recurso": 3,
+    "data": "2026-11-02",
+    "hora_inicio": "09:00:00",
+    "hora_fim": "09:30:00",
+    "status": "CONFIRMADO",
+    "observacao": "",
+    "criado_em": "2026-10-21T08:00:00Z"
+  }
+},
+{
+  "model": "agenda.agendamento",
+  "pk": 5,
+  "fields": {
+    "cliente": 102,
+    "profissional": 1,
+    "servico": 1,
+    "sala": 1,
+    "recurso": null,
+    "data": "2026-11-04",
+    "hora_inicio": "17:00:00",
+    "hora_fim": "18:00:00",
+    "status": "CANCELADO",
+    "observacao": "Cliente avisou que não poderia vir.",
+    "criado_em": "2026-10-21T08:05:00Z"
+  }
+}
+]
