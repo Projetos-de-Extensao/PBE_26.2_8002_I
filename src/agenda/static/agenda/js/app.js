@@ -88,6 +88,7 @@
     document.body.appendChild(modal);
 
     var formularioAtual = null;
+    var botaoAtual = null;
     modal.querySelector("[data-voltar]").addEventListener("click", function () {
       modal.close();
     });
@@ -95,7 +96,12 @@
       if (formularioAtual) {
         formularioAtual.dataset.confirmado = "1";
         modal.close();
-        formularioAtual.submit();
+        // requestSubmit mantém o botão clicado (name/value) nos dados enviados.
+        if (typeof formularioAtual.requestSubmit === "function") {
+          formularioAtual.requestSubmit(botaoAtual || undefined);
+        } else {
+          formularioAtual.submit();
+        }
       }
     });
 
@@ -104,6 +110,7 @@
         if (formulario.dataset.confirmado === "1") return;
         evento.preventDefault();
         formularioAtual = formulario;
+        botaoAtual = evento.submitter || null;
         modal.querySelector("h2").textContent = formulario.dataset.confirm;
         modal.querySelector("[data-texto]").textContent = formulario.dataset.confirmText || "";
         modal.querySelector("[data-confirmar]").textContent =

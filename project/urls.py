@@ -24,6 +24,12 @@ from django.contrib.auth.views import (
 )
 from django.urls import path, reverse_lazy
 
+from agendamento.agenda_profissional import (
+    CriarBloqueioView,
+    DisponibilidadeBloqueioView,
+    RemoverBloqueioView,
+    RemoverDisponibilidadeView,
+)
 from agendamento.administracao import (
     AdministracaoView,
     ProfissionalCreateView,
@@ -42,9 +48,12 @@ from agendamento.views import (
     LoginView,
     NovoAgendamentoView,
     PerfilEdicaoView,
+    PreviaRecorrenciaView,
     ProfissionalDetailView,
     ProfissionalListView,
     CancelarAgendamentoView,
+    HorariosReagendamentoView,
+    ReagendarAgendamentoView,
 )
 from agendamento.admin_site import admin_site
 
@@ -111,6 +120,31 @@ urlpatterns = [
         name="novo_agendamento",
     ),
     path(
+        "agendar/<int:servico_id>/previa-recorrencia/",
+        PreviaRecorrenciaView.as_view(),
+        name="previa_recorrencia",
+    ),
+    path(
+        "profissional/disponibilidade/",
+        DisponibilidadeBloqueioView.as_view(),
+        name="disponibilidade_bloqueio",
+    ),
+    path(
+        "profissional/disponibilidade/<int:pk>/remover/",
+        RemoverDisponibilidadeView.as_view(),
+        name="remover_disponibilidade",
+    ),
+    path(
+        "profissional/bloqueios/novo/",
+        CriarBloqueioView.as_view(),
+        name="criar_bloqueio",
+    ),
+    path(
+        "profissional/bloqueios/<int:pk>/remover/",
+        RemoverBloqueioView.as_view(),
+        name="remover_bloqueio",
+    ),
+    path(
         "minha-agenda/",
         AgendaClienteView.as_view(),
         name="minha_agenda",
@@ -119,6 +153,16 @@ urlpatterns = [
         "minha-agenda/<int:pk>/cancelar/",
         CancelarAgendamentoView.as_view(),
         name="cancelar_agendamento",
+    ),
+    path(
+        "agendamentos/<int:pk>/horarios/",
+        HorariosReagendamentoView.as_view(),
+        name="horarios_reagendamento",
+    ),
+    path(
+        "agendamentos/<int:pk>/reagendar/",
+        ReagendarAgendamentoView.as_view(),
+        name="reagendar_agendamento",
     ),
     path(
         "senha/redefinir/",

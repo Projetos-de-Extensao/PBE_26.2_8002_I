@@ -116,35 +116,24 @@
     <section class="section" aria-labelledby="gestao-agenda-heading">
       <div class="section__header">
         <h2 id="gestao-agenda-heading">Gestão da agenda</h2>
-        <span class="soon-tag">Em breve</span>
       </div>
       <div class="grid grid--2">
-        <article class="card future">
-          <div class="shortcut">
-            <span class="shortcut__icon"><svg class="icon" aria-hidden="true"><use href="#i-clock"></use></svg></span>
-            <span>
-              <span class="shortcut__title">Disponibilidade semanal</span>
-              <span class="shortcut__text">Defina dias e faixas de horário em que você atende e vincule seus serviços.</span>
-            </span>
-          </div>
-          <div class="card__footer">
-            <span class="btn btn--secondary btn--sm" aria-disabled="true">Configurar disponibilidade</span>
-            <span class="muted text-xs">Depende de implementação no backend</span>
-          </div>
-        </article>
-        <article class="card future">
-          <div class="shortcut">
-            <span class="shortcut__icon"><svg class="icon" aria-hidden="true"><use href="#i-calendar-off"></use></svg></span>
-            <span>
-              <span class="shortcut__title">Bloqueio de horários</span>
-              <span class="shortcut__text">Retire períodos da agenda informando o motivo. Atendimentos afetados serão listados antes.</span>
-            </span>
-          </div>
-          <div class="card__footer">
-            <span class="btn btn--secondary btn--sm" aria-disabled="true">Bloquear horário</span>
-            <span class="muted text-xs">Depende de implementação no backend</span>
-          </div>
-        </article>
+        <a class="card card--interactive shortcut" href="{% url 'disponibilidade_bloqueio' %}">
+          <span class="shortcut__icon"><svg class="icon" aria-hidden="true"><use href="#i-clock"></use></svg></span>
+          <span>
+            <span class="shortcut__title">Disponibilidade semanal</span>
+            <span class="shortcut__text">Defina os dias e as faixas de horário em que você atende.</span>
+          </span>
+          <svg class="icon shortcut__arrow" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+        </a>
+        <a class="card card--interactive shortcut" href="{% url 'disponibilidade_bloqueio' %}#titulo-bloqueio">
+          <span class="shortcut__icon"><svg class="icon" aria-hidden="true"><use href="#i-calendar-off"></use></svg></span>
+          <span>
+            <span class="shortcut__title">Bloqueio de horários</span>
+            <span class="shortcut__text">Retire períodos da agenda informando o motivo. Atendimentos afetados são listados antes.</span>
+          </span>
+          <svg class="icon shortcut__arrow" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+        </a>
       </div>
     </section>
 
