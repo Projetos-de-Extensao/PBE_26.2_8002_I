@@ -1,9 +1,13 @@
 {% extends "agendamento/base.html" %}
-{% block title %}Acesso negado{% endblock %}
+{% block title %}Acesso negado | Equilibra{% endblock %}
+{% block content_class %}content--narrow{% endblock %}
 {% block content %}
-  <h1>Acesso negado</h1>
-  <p>Seu perfil não tem permissão para realizar esta ação.</p>
-  <nav class="options" aria-label="Navegação">
-    <a href="{% url 'login' %}">Voltar</a>
-  </nav>
+  <div class="empty-state">
+    <span class="empty-state__icon empty-state__icon--danger"><svg class="icon icon--lg" aria-hidden="true"><use href="#i-lock"></use></svg></span>
+    <h1>Acesso negado</h1>
+    <p>Seu perfil não tem permissão para realizar esta ação.</p>
+    <div class="btn-row">
+      <a class="btn btn--secondary" href="{% url 'login' %}">Voltar</a>
+    </div>
+  </div>
 {% endblock %}

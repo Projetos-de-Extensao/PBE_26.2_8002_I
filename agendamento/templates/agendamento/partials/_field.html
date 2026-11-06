@@ -1,0 +1,11 @@
+{# Campo de formulário padrão. Uso: {% include "agendamento/partials/_field.html" with field=form.campo %} #}
+<div class="field{% if field.errors %} field--invalid{% endif %}{% if field.widget_type == 'checkbox' %} field--check{% endif %}">
+  {% if field.widget_type == "checkbox" %}
+    <label for="{{ field.id_for_label }}">{{ field }} {{ field.label }}</label>
+  {% else %}
+    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+    {{ field }}
+  {% endif %}
+  {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+  {% if field.errors %}<div class="field__error" role="alert">{{ field.errors }}</div>{% endif %}
+</div>

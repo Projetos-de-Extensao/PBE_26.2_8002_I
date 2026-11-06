@@ -1,28 +1,72 @@
 {% extends "agendamento/base.html" %}
-{% block title %}Agendar {{ servico.nome }}{% endblock %}
+{% block title %}Agendar {{ servico.nome }} | Equilibra{% endblock %}
+{% block topbar_context %}<a class="link" href="{% url 'profissional_detail' profissional.pk %}"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-chevron-left"></use></svg> Voltar ao perfil</a>{% endblock %}
+{% block content_class %}content--narrow{% endblock %}
 {% block content %}
-  <h1>Agendar serviço</h1>
-  <p><strong>Profissional:</strong> {{ profissional.nome }}</p>
-  <p><strong>Serviço:</strong> {{ servico.nome }} · {{ servico.duracao_minutos }} min</p>
-  {% if form.fields.horario.choices %}
-    <form method="post">
-      {% csrf_token %}
-      {% if form.non_field_errors %}
-        <div class="error" role="alert">{{ form.non_field_errors }}</div>
+  <header class="page-header">
+    <div class="page-header__text">
+      <span class="eyebrow">Novo agendamento</span>
+      <h1>Agendar serviço</h1>
+      <p class="lead mb-0">Escolha um dos horários livres. O término é calculado pela duração do serviço.</p>
+    </div>
+  </header>
+
+  <ol class="steps" aria-label="Etapas do agendamento">
+    <li class="is-done">Profissional</li>
+    <li class="is-done">Serviço</li>
+    <li class="is-current" aria-current="step">Horário</li>
+    <li>Confirmação</li>
+  </ol>
+
+  <div class="card mb-5">
+    <table class="summary-table">
+      <tr>
+        <th scope="row">Profissional</th>
+        <td class="cell-strong">{{ profissional.nome }}</td>
+      </tr>
+      <tr>
+        <th scope="row">Serviço</th>
+        <td class="cell-strong">{{ servico.nome }} · {{ servico.duracao_minutos }} min</td>
+      </tr>
+      {% if profissional.get_modalidade_display %}
+        <tr>
+          <th scope="row">Modalidade</th>
+          <td>{{ profissional.get_modalidade_display }}</td>
+        </tr>
       {% endif %}
-      <div class="field">
+    </table>
+  </div>
+
+  {% if form.fields.horario.choices %}
+    <form method="post" class="card form">
+      {% csrf_token %}
+      {% include "agendamento/partials/_form_errors.html" %}
+      <div class="field{% if form.horario.errors %} field--invalid{% endif %}">
         <label for="{{ form.horario.id_for_label }}">{{ form.horario.label }}</label>
-        {{ form.horario }}
+        <select name="{{ form.horario.html_name }}" id="{{ form.horario.id_for_label }}" autocomplete="off" required data-slot-picker>
+          {% for valor, rotulo in form.fields.horario.choices %}
+            <option value="{{ valor }}"{% if form.horario.value == valor %} selected{% endif %}>{{ rotulo }}</option>
+          {% endfor %}
+        </select>
         {% if form.horario.errors %}
-          <div class="error" role="alert">{{ form.horario.errors }}</div>
+          <div class="field__error" role="alert">{{ form.horario.errors }}</div>
         {% endif %}
       </div>
-      <button type="submit">Confirmar agendamento</button>
+      <div class="btn-row btn-row--end mt-0">
+        <a class="btn btn--ghost" href="{% url 'profissional_detail' profissional.pk %}">Voltar ao perfil</a>
+        <button type="submit" class="btn btn--lg">
+          <svg class="icon" aria-hidden="true"><use href="#i-check"></use></svg> Confirmar agendamento
+        </button>
+      </div>
     </form>
   {% else %}
-    <p class="muted">Não há horários livres para este serviço nos próximos 30 dias.</p>
+    <div class="empty-state">
+      <span class="empty-state__icon"><svg class="icon icon--lg" aria-hidden="true"><use href="#i-calendar-off"></use></svg></span>
+      <h3>Sem horários livres</h3>
+      <p>Não há horários livres para este serviço nos próximos 30 dias.</p>
+      <div class="btn-row">
+        <a class="btn btn--secondary" href="{% url 'profissionais' %}">Ver outros profissionais</a>
+      </div>
+    </div>
   {% endif %}
-  <nav class="options" aria-label="Navegação do agendamento">
-    <a href="{% url 'profissional_detail' profissional.pk %}">Voltar ao perfil</a>
-  </nav>
 {% endblock %}

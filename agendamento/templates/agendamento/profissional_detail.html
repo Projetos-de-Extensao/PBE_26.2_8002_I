@@ -1,68 +1,104 @@
 {% extends "agendamento/base.html" %}
 {% block title %}{{ profissional.nome }} | Perfil profissional{% endblock %}
-{% block main_class %}wide{% endblock %}
+{% block topbar_context %}<a class="link" href="{% url 'profissionais' %}"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-chevron-left"></use></svg> Voltar aos profissionais</a>{% endblock %}
 {% block content %}
-  <h1>{{ profissional.nome }}</h1>
-  <p><strong>Especialidade:</strong> {{ profissional.especialidade }}</p>
-  {% if profissional.formacao %}
-    <p><strong>Formação:</strong> {{ profissional.formacao|linebreaksbr }}</p>
-  {% endif %}
-
-  <section aria-labelledby="apresentacao-heading">
-    <h2 id="apresentacao-heading">Apresentação</h2>
-    {% if profissional.apresentacao %}
-      <p>{{ profissional.apresentacao|linebreaksbr }}</p>
-    {% else %}
-      <p class="muted">Apresentação ainda não informada.</p>
-    {% endif %}
-  </section>
-
-  <section aria-labelledby="servicos-heading">
-    <h2 id="servicos-heading">Serviços e próximos horários livres</h2>
-    {% if servicos %}
-      <div class="cards">
-        {% for servico in servicos %}
-          <article class="card">
-            <h2>{{ servico.nome }}</h2>
-            <p>{{ servico.tipo }} · {{ servico.duracao_minutos }} min</p>
-            {% if servico.proximos_horarios %}
-              <p><strong>Próximos horários:</strong></p>
-              <ul class="slots">
-                {% for horario in servico.proximos_horarios %}
-                  <li>{{ horario|date:"d/m/Y" }} às {{ horario|date:"H:i" }}</li>
-                {% endfor %}
-              </ul>
-            {% else %}
-              <p class="muted">Sem horários livres nos próximos 30 dias.</p>
-            {% endif %}
-            <a class="button-link" href="{% url 'novo_agendamento' servico.id %}">
-              Agendar este serviço
-            </a>
-          </article>
-        {% endfor %}
+  <section class="profile-hero" aria-labelledby="nome-profissional">
+    <span class="avatar avatar--xl avatar--{{ profissional.modalidade }}" aria-hidden="true">{{ profissional.nome|slice:":1" }}</span>
+    <div class="profile-hero__info">
+      <span class="eyebrow">Perfil profissional</span>
+      <h1 id="nome-profissional">{{ profissional.nome }}</h1>
+      <p class="lead mb-0"><strong>Especialidade:</strong> {{ profissional.especialidade }}</p>
+      <div class="profile-hero__tags">
+        <span class="badge badge--brand badge--plain">
+          <svg class="icon icon--sm" aria-hidden="true"><use href="#i-{% if profissional.modalidade == 'online' %}video{% else %}map-pin{% endif %}"></use></svg>
+          {{ profissional.get_modalidade_display }}
+        </span>
+        {% if servicos %}
+          <span class="badge badge--plain">{{ servicos|length }} serviço{{ servicos|length|pluralize }}</span>
+        {% endif %}
       </div>
-    {% else %}
-      <p class="muted">Este profissional ainda não cadastrou serviços.</p>
-    {% endif %}
+    </div>
   </section>
 
-  <section aria-labelledby="disponibilidade-heading">
-    <h2 id="disponibilidade-heading">Disponibilidade semanal</h2>
-    {% if profissional.disponibilidades.all %}
-      <ul class="availability">
-        {% for disponibilidade in profissional.disponibilidades.all %}
-          <li>
-            {{ disponibilidade.get_dia_semana_display }}:
-            {{ disponibilidade.hora_inicio|time:"H:i" }}–{{ disponibilidade.hora_fim|time:"H:i" }}
-          </li>
-        {% endfor %}
-      </ul>
-    {% else %}
-      <p class="muted">Disponibilidade ainda não informada.</p>
-    {% endif %}
-  </section>
+  <div class="layout-split">
+    <div class="stack">
+      <section class="card" aria-labelledby="apresentacao-heading">
+        <h2 id="apresentacao-heading" class="card__title mb-4">Apresentação</h2>
+        {% if profissional.apresentacao %}
+          <p class="mb-0">{{ profissional.apresentacao|linebreaksbr }}</p>
+        {% else %}
+          <p class="muted mb-0">Apresentação ainda não informada.</p>
+        {% endif %}
+      </section>
 
-  <nav class="options" aria-label="Navegação de profissionais">
-    <a href="{% url 'profissionais' %}">Voltar aos profissionais</a>
-  </nav>
+      <section aria-labelledby="servicos-heading">
+        <div class="section__header">
+          <h2 id="servicos-heading">Serviços e próximos horários livres</h2>
+        </div>
+        {% if servicos %}
+          <div class="grid grid--2">
+            {% for servico in servicos %}
+              <article class="card service-card">
+                <div class="card__header mb-0">
+                  <div>
+                    <h3 class="card__title">{{ servico.nome }}</h3>
+                    <p class="card__meta mb-0">{{ servico.tipo }}</p>
+                  </div>
+                  <span class="badge badge--plain"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-clock"></use></svg>{{ servico.duracao_minutos }} min</span>
+                </div>
+                {% if servico.proximos_horarios %}
+                  <div>
+                    <p class="label">Próximos horários:</p>
+                    <ul class="slots-inline">
+                      {% for horario in servico.proximos_horarios %}
+                        <li class="slot-chip">{{ horario|date:"d/m/Y" }} às {{ horario|date:"H:i" }}</li>
+                      {% endfor %}
+                    </ul>
+                  </div>
+                {% else %}
+                  <p class="muted text-sm mb-0">Sem horários livres nos próximos 30 dias.</p>
+                {% endif %}
+                <a class="btn btn--block" href="{% url 'novo_agendamento' servico.id %}">Agendar este serviço</a>
+              </article>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="empty-state">
+            <span class="empty-state__icon"><svg class="icon icon--lg" aria-hidden="true"><use href="#i-briefcase"></use></svg></span>
+            <h3>Sem serviços</h3>
+            <p>Este profissional ainda não cadastrou serviços.</p>
+          </div>
+        {% endif %}
+      </section>
+    </div>
+
+    <aside class="stack">
+      {% if profissional.formacao %}
+        <section class="card" aria-labelledby="formacao-heading">
+          <h2 id="formacao-heading" class="card__title mb-4">
+            <svg class="icon" aria-hidden="true"><use href="#i-graduation"></use></svg> Formação
+          </h2>
+          <p class="mb-0 text-sm"><strong class="sr-only">Formação:</strong> {{ profissional.formacao|linebreaksbr }}</p>
+        </section>
+      {% endif %}
+
+      <section class="card" aria-labelledby="disponibilidade-heading">
+        <h2 id="disponibilidade-heading" class="card__title mb-4">
+          <svg class="icon" aria-hidden="true"><use href="#i-calendar"></use></svg> Disponibilidade semanal
+        </h2>
+        {% if profissional.disponibilidades.all %}
+          <ul class="week-list">
+            {% for disponibilidade in profissional.disponibilidades.all %}
+              <li>
+                <strong>{{ disponibilidade.get_dia_semana_display }}</strong>
+                <span>{{ disponibilidade.hora_inicio|time:"H:i" }}–{{ disponibilidade.hora_fim|time:"H:i" }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="muted mb-0">Disponibilidade ainda não informada.</p>
+        {% endif %}
+      </section>
+    </aside>
+  </div>
 {% endblock %}

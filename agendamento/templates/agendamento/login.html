@@ -1,42 +1,70 @@
-{% extends "agendamento/base.html" %}
-{% block title %}Login{% endblock %}
+{% extends "agendamento/base_auth.html" %}
+{% block title %}Entrar | Equilibra{% endblock %}
 {% block content %}
   {% if user.is_authenticated %}
+    <span class="eyebrow">Sessão ativa</span>
     <h1>Acesso realizado</h1>
-    <p class="success">Você está conectado como {{ user.email }}.</p>
-    <a class="text-link" href="{% url 'perfil' %}">Editar perfil</a>
-    {% if user.perfil.papel == "administrador" and user.is_staff and user.is_active %}
-      <a class="text-link" href="{% url 'administracao' %}">Painel administrativo</a>
-    {% endif %}
-    <a class="text-link" href="{% url 'profissionais' %}">Ver profissionais</a>
-    {% if user.perfil.papel == "cliente" %}
-      <a class="text-link" href="{% url 'minha_agenda' %}">Minha agenda</a>
-    {% endif %}
-    <form method="post" action="{% url 'logout' %}">
+    <p class="lead">Você está conectado como {{ user.email }}.</p>
+
+    <div class="stack-sm">
+      {% if user.perfil.papel == "administrador" and user.is_staff and user.is_active %}
+        <a class="card card--interactive shortcut" href="{% url 'administracao' %}">
+          <span class="shortcut__icon"><svg class="icon" aria-hidden="true"><use href="#i-chart"></use></svg></span>
+          <span><span class="shortcut__title">Painel administrativo</span><span class="shortcut__text">Cadastros e operação do dia</span></span>
+          <svg class="icon shortcut__arrow" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+        </a>
+      {% else %}
+        <a class="card card--interactive shortcut" href="{% url 'inicio' %}">
+          <span class="shortcut__icon"><svg class="icon" aria-hidden="true"><use href="#i-home"></use></svg></span>
+          <span><span class="shortcut__title">Ir para o início</span><span class="shortcut__text">Seus próximos atendimentos</span></span>
+          <svg class="icon shortcut__arrow" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+        </a>
+      {% endif %}
+      <a class="card card--interactive shortcut" href="{% url 'profissionais' %}">
+        <span class="shortcut__icon"><svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg></span>
+        <span><span class="shortcut__title">Ver profissionais</span><span class="shortcut__text">Busque por especialidade e modalidade</span></span>
+        <svg class="icon shortcut__arrow" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+      </a>
+      {% if user.perfil.papel == "cliente" %}
+        <a class="card card--interactive shortcut" href="{% url 'minha_agenda' %}">
+          <span class="shortcut__icon"><svg class="icon" aria-hidden="true"><use href="#i-calendar"></use></svg></span>
+          <span><span class="shortcut__title">Minha agenda</span><span class="shortcut__text">Atendimentos marcados e histórico</span></span>
+          <svg class="icon shortcut__arrow" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+        </a>
+      {% endif %}
+      <a class="card card--interactive shortcut" href="{% url 'perfil' %}">
+        <span class="shortcut__icon"><svg class="icon" aria-hidden="true"><use href="#i-edit"></use></svg></span>
+        <span><span class="shortcut__title">Editar perfil</span><span class="shortcut__text">Nome, telefone e dados da conta</span></span>
+        <svg class="icon shortcut__arrow" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+      </a>
+    </div>
+
+    <form method="post" action="{% url 'logout' %}" class="mt-5">
       {% csrf_token %}
-      <button type="submit">Sair</button>
+      <button type="submit" class="btn btn--secondary btn--block">
+        <svg class="icon" aria-hidden="true"><use href="#i-logout"></use></svg> Sair
+      </button>
     </form>
   {% else %}
-    <h1>Login</h1>
-    <form method="post">
+    <span class="eyebrow">Bem-vindo de volta</span>
+    <h1>Entrar na sua conta</h1>
+    <p class="lead">Use o e-mail e a senha cadastrados.</p>
+
+    <form method="post" class="form">
       {% csrf_token %}
-      {% if form.non_field_errors %}
-        <div class="error" role="alert">{{ form.non_field_errors }}</div>
-      {% endif %}
+      {% include "agendamento/partials/_form_errors.html" %}
       {% for field in form %}
-        <div class="field">
-          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-          {{ field }}
-          {% if field.errors %}
-            <div class="error" role="alert">{{ field.errors }}</div>
-          {% endif %}
-        </div>
+        {% include "agendamento/partials/_field.html" with field=field %}
       {% endfor %}
-      <button type="submit">Entrar</button>
+      <div class="row row--end">
+        <a class="link text-sm" href="{% url 'password_reset' %}">Esqueci minha senha</a>
+      </div>
+      <button type="submit" class="btn btn--lg btn--block">Entrar</button>
     </form>
-    <nav class="options" aria-label="Opções de conta">
-      <a href="{% url 'cadastro' %}">Cadastrar</a>
-      <a href="{% url 'password_reset' %}">Esqueci minha senha</a>
-    </nav>
+
+    <p class="form-divider">ou</p>
+    <p class="text-sm muted text-center">
+      Ainda não tem conta? <a class="link" href="{% url 'cadastro' %}">Cadastrar</a>
+    </p>
   {% endif %}
 {% endblock %}

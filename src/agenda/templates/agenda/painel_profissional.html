@@ -1,51 +1,85 @@
 {% extends "agenda/base.html" %}
 
 {% block title %}Painel do profissional{% endblock %}
+{% block topbar_context %}Painel do profissional{% endblock %}
 
 {% block conteudo %}
-<h1>Painel do Profissional</h1>
-<p>Nome: {{ profissional }}</p>
+<header class="page-header">
+  <div class="page-header__text">
+    <span class="eyebrow">Profissional</span>
+    <h1>Painel do Profissional</h1>
+    <p class="lead mb-0">Nome: {{ profissional }}</p>
+  </div>
+  <div class="page-header__actions">
+    <a class="btn btn--secondary" href="{% url 'agenda:disponibilidade_bloqueio' %}">
+      <svg class="icon" aria-hidden="true"><use href="#i-clock"></use></svg> Definir disponibilidade
+    </a>
+    <button type="button" class="btn btn--accent" onclick="document.getElementById('modal-bloqueio').showModal()">
+      <svg class="icon" aria-hidden="true"><use href="#i-calendar-off"></use></svg> Bloquear horário
+    </button>
+  </div>
+</header>
 
-<p>
-  <a href="{% url 'agenda:disponibilidade_bloqueio' %}">Definir disponibilidade</a>
-  &nbsp;|&nbsp;
-  <button type="button" onclick="document.getElementById('modal-bloqueio').showModal()">Bloquear horário</button>
-</p>
+<section class="section" aria-labelledby="agenda-dia">
+  <div class="section__header">
+    <h2 id="agenda-dia">Agenda do dia</h2>
+    <span class="badge badge--brand badge--plain">{{ agendamentos|length }} atendimento{{ agendamentos|length|pluralize }}</span>
+  </div>
 
-<h2>Agenda do dia</h2>
-<p>
-  <a href="?dia={{ dia_anterior|date:'Y-m-d' }}">&larr; dia anterior</a>
-  &mdash; <strong>{{ dia|date:"d/m/Y" }}</strong> &mdash;
-  <a href="?dia={{ dia_seguinte|date:'Y-m-d' }}">dia seguinte &rarr;</a>
-</p>
+  <nav class="day-nav" aria-label="Navegar entre dias">
+    <a class="btn btn--ghost btn--sm" href="?dia={{ dia_anterior|date:'Y-m-d' }}"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-chevron-left"></use></svg> dia anterior</a>
+    <span class="day-nav__current">{{ dia|date:"l" }}, <strong>{{ dia|date:"d/m/Y" }}</strong></span>
+    <a class="btn btn--ghost btn--sm" href="?dia={{ dia_seguinte|date:'Y-m-d' }}">dia seguinte <svg class="icon icon--sm" aria-hidden="true"><use href="#i-chevron-right"></use></svg></a>
+  </nav>
 
-{% if agendamentos %}
-<table>
-  <tr><th>Horário</th><th>Serviço</th><th>Cliente</th><th>Status</th></tr>
-  {% for agendamento in agendamentos %}
-  <tr>
-    <td>{{ agendamento.hora_inicio|time:"H:i" }} - {{ agendamento.hora_fim|time:"H:i" }}</td>
-    <td>{{ agendamento.servico }}</td>
-    <td>{{ agendamento.cliente }}</td>
-    <td>{{ agendamento.get_status_display }}</td>
-  </tr>
-  {% endfor %}
-</table>
-{% else %}
-<p>Nenhum atendimento neste dia.</p>
-{% endif %}
+  {% if agendamentos %}
+    <ul class="appt-list">
+      {% for agendamento in agendamentos %}
+        <li class="appt">
+          <div class="time-tile">
+            {{ agendamento.hora_inicio|time:"H:i" }}
+            <small>até {{ agendamento.hora_fim|time:"H:i" }}</small>
+          </div>
+          <div>
+            <h3 class="appt__title">{{ agendamento.servico }}</h3>
+            <p class="appt__meta">
+              <span><svg class="icon icon--sm" aria-hidden="true"><use href="#i-clock"></use></svg>{{ agendamento.hora_inicio|time:"H:i" }} - {{ agendamento.hora_fim|time:"H:i" }}</span>
+              <span><svg class="icon icon--sm" aria-hidden="true"><use href="#i-user"></use></svg>{{ agendamento.cliente }}</span>
+              {% if agendamento.sala %}<span><svg class="icon icon--sm" aria-hidden="true"><use href="#i-map-pin"></use></svg>{{ agendamento.sala.nome }}</span>{% endif %}
+            </p>
+          </div>
+          <div class="appt__aside">
+            <span class="badge badge--{{ agendamento.status|lower }}">{{ agendamento.get_status_display }}</span>
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <div class="empty-state">
+      <span class="empty-state__icon"><svg class="icon icon--lg" aria-hidden="true"><use href="#i-calendar"></use></svg></span>
+      <h3>Agenda livre</h3>
+      <p>Nenhum atendimento neste dia.</p>
+    </div>
+  {% endif %}
+</section>
 
-<dialog id="modal-bloqueio">
+<dialog id="modal-bloqueio" aria-labelledby="titulo-bloqueio">
   <form method="post" action="{% url 'agenda:criar_bloqueio' %}">
     {% csrf_token %}
     <input type="hidden" name="origem" value="{% url 'agenda:painel_profissional' %}?dia={{ dia|date:'Y-m-d' }}">
-    <h2>Bloquear horário</h2>
-    <div class="campo">{{ bloqueio_form.data.label_tag }}{{ bloqueio_form.data }}</div>
-    <div class="campo">{{ bloqueio_form.hora_inicio.label_tag }}{{ bloqueio_form.hora_inicio }}</div>
-    <div class="campo">{{ bloqueio_form.hora_fim.label_tag }}{{ bloqueio_form.hora_fim }}</div>
+    <span class="modal__icon modal__icon--warning"><svg class="icon icon--lg" aria-hidden="true"><use href="#i-calendar-off"></use></svg></span>
+    <h2 id="titulo-bloqueio">Bloquear horário</h2>
+    <p class="muted text-sm">O período fica indisponível para novos agendamentos. Se houver atendimentos marcados, você verá a lista antes de confirmar.</p>
+    <div class="form-grid">
+      <div class="campo">{{ bloqueio_form.data.label_tag }}{{ bloqueio_form.data }}</div>
+      <div class="campo">{{ bloqueio_form.hora_inicio.label_tag }}{{ bloqueio_form.hora_inicio }}</div>
+      <div class="campo">{{ bloqueio_form.hora_fim.label_tag }}{{ bloqueio_form.hora_fim }}</div>
+    </div>
     <div class="campo">{{ bloqueio_form.motivo.label_tag }}{{ bloqueio_form.motivo }}</div>
-    <button type="submit">Salvar</button>
-    <button type="button" onclick="document.getElementById('modal-bloqueio').close()">Cancelar</button>
+    <div class="btn-row btn-row--end mt-0">
+      <button type="button" class="btn btn--secondary" onclick="document.getElementById('modal-bloqueio').close()">Cancelar</button>
+      <button type="submit" class="btn">Salvar</button>
+    </div>
   </form>
 </dialog>
 {% endblock %}

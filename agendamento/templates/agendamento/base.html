@@ -1,235 +1,53 @@
-<!doctype html>
+{% load static %}<!doctype html>
 <html lang="pt-br">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#073b3a">
     <title>{% block title %}Agendamento{% endblock %}</title>
-    <style>
-      :root {
-        color-scheme: light;
-        font-family: system-ui, sans-serif;
-        color: #172033;
-        background: #f3f5f9;
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
-      body {
-        display: grid;
-        min-height: 100vh;
-        margin: 0;
-        padding: 1.5rem;
-        place-items: center;
-      }
-
-      main {
-        width: min(100%, 26rem);
-        padding: 2.5rem;
-        border: 1px solid #e1e6ef;
-        border-radius: 1rem;
-        background: #fff;
-        box-shadow: 0 1rem 2.5rem #17203312;
-      }
-
-      main.wide {
-        width: min(100%, 56rem);
-      }
-
-      .filters-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
-        gap: 1rem;
-      }
-
-      h1 {
-        margin: 0 0 1.75rem;
-        font-size: 1.75rem;
-      }
-
-      h2 {
-        margin: 0 0 0.75rem;
-        font-size: 1.2rem;
-      }
-
-      section + section {
-        margin-top: 2rem;
-      }
-
-      .cards {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
-        gap: 1rem;
-      }
-
-      .card {
-        padding: 1.25rem;
-        border: 1px solid #e1e6ef;
-        border-radius: 0.75rem;
-      }
-
-      .card h2 {
-        margin-bottom: 0.4rem;
-      }
-
-      .muted {
-        color: #687386;
-      }
-
-      .slots,
-      .availability {
-        margin: 0;
-        padding-left: 1.25rem;
-      }
-
-      .slots li,
-      .availability li {
-        margin: 0.35rem 0;
-      }
-
-      .field {
-        margin-bottom: 1.25rem;
-      }
-
-      label {
-        display: block;
-        margin-bottom: 0.45rem;
-        font-weight: 600;
-      }
-
-      input,
-      select {
-        width: 100%;
-        padding: 0.75rem 0.85rem;
-        border: 1px solid #b9c3d2;
-        border-radius: 0.5rem;
-        font: inherit;
-      }
-
-      input:focus-visible,
-      button:focus-visible,
-      a:focus-visible {
-        outline: 3px solid #9db8ff;
-        outline-offset: 2px;
-      }
-
-      button {
-        width: 100%;
-        margin-top: 0.25rem;
-        padding: 0.8rem;
-        border: 0;
-        border-radius: 0.5rem;
-        background: #2457c5;
-        color: #fff;
-        font: inherit;
-        font-weight: 700;
-        cursor: pointer;
-      }
-
-      .button-link {
-        display: block;
-        margin-top: 1rem;
-        padding: 0.8rem;
-        border-radius: 0.5rem;
-        background: #2457c5;
-        color: #fff;
-        font-weight: 700;
-        text-align: center;
-        text-decoration: none;
-      }
-
-      .error,
-      .notice {
-        margin: 0 0 1.25rem;
-        padding: 0.8rem;
-        border-radius: 0.5rem;
-      }
-
-      .error {
-        border: 1px solid #e6a3a3;
-        background: #fff1f1;
-        color: #8d1d1d;
-      }
-
-      .notice {
-        border: 1px solid #a6d8b5;
-        background: #effaf2;
-        color: #205b32;
-      }
-
-      .error ul {
-        margin: 0;
-        padding-left: 1.25rem;
-      }
-
-      .options {
-        display: flex;
-        justify-content: space-between;
-        gap: 1rem;
-        margin-top: 1.25rem;
-        font-size: 0.9rem;
-      }
-
-      .options a {
-        color: #2457c5;
-      }
-
-      .text-link {
-        display: inline-block;
-        margin-top: 0.75rem;
-        color: #2457c5;
-        font-weight: 600;
-      }
-
-      .success {
-        margin: 0;
-      }
-
-      .profile-backdrop {
-        position: fixed;
-        z-index: 1;
-        inset: 0;
-        background: #17203380;
-      }
-
-      .profile-dialog[open] {
-        position: fixed;
-        z-index: 2;
-        inset: 0;
-        display: block;
-        width: min(calc(100% - 2rem), 36rem);
-        max-height: calc(100vh - 2rem);
-        margin: auto;
-        padding: 2rem;
-        overflow: auto;
-        border: 1px solid #e1e6ef;
-        border-radius: 1rem;
-        background: #fff;
-        box-shadow: 0 1rem 2.5rem #17203340;
-      }
-
-      @media (max-width: 24rem) {
-        main {
-          padding: 1.5rem;
-        }
-
-        .profile-dialog[open] {
-          padding: 1.5rem;
-        }
-
-        .options {
-          flex-direction: column;
-        }
-      }
-    </style>
+    <link rel="stylesheet" href="{% static 'agendamento/css/app.css' %}">
+    {% block extra_head %}{% endblock %}
   </head>
   <body>
-    <main class="{% block main_class %}{% endblock %}">
-      {% for message in messages %}
-        <div class="notice" role="status">{{ message }}</div>
-      {% endfor %}
-      {% block content %}{% endblock %}
-    </main>
+    {% include "agendamento/partials/_icons.html" %}
+    <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+
+    <div class="app" data-app>
+      {% include "agendamento/partials/_sidebar.html" %}
+
+      <div class="main">
+        <header class="topbar">
+          <button type="button" class="btn topbar__menu" data-nav-toggle aria-controls="menu-lateral" aria-expanded="false" aria-label="Abrir menu">
+            <svg class="icon" aria-hidden="true"><use href="#i-menu"></use></svg>
+          </button>
+          <div class="topbar__context">{% block topbar_context %}{% endblock %}</div>
+          <div class="topbar__spacer"></div>
+          {% if user.is_authenticated %}
+            <a class="user-chip" href="{% url 'perfil' %}" title="Editar perfil">
+              <span class="avatar" aria-hidden="true">{{ user.nome|default:user.email|slice:":1" }}</span>
+              <span class="user-chip__text">
+                <span class="user-chip__name">{{ user.nome|default:user.email }}</span>
+                <span class="user-chip__role">{{ user.perfil.get_papel_display|default:"Usuário" }}</span>
+              </span>
+            </a>
+          {% else %}
+            <a class="btn btn--secondary btn--sm" href="{% url 'login' %}">Entrar</a>
+            <a class="btn btn--sm" href="{% url 'cadastro' %}">Criar conta</a>
+          {% endif %}
+        </header>
+
+        <main id="conteudo" class="content {% block content_class %}{% endblock %} {% block main_class %}{% endblock %}">
+          {% include "agendamento/partials/_messages.html" %}
+          {% block content %}{% endblock %}
+        </main>
+
+        <footer class="app-footer">
+          Plataforma de agendamento multidisciplinar · Projeto de extensão
+        </footer>
+      </div>
+    </div>
+
+    <script src="{% static 'agendamento/js/app.js' %}" defer></script>
+    {% block scripts %}{% endblock %}
   </body>
 </html>
