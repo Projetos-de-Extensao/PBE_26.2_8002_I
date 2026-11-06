@@ -1,34 +1,44 @@
 {% extends "agenda/base.html" %}
 
 {% block title %}Minha Agenda{% endblock %}
+{% block topbar_context %}Minha agenda{% endblock %}
 
 {% block conteudo %}
-<h1>Minha Agenda</h1>
+<header class="page-header">
+  <div class="page-header__text">
+    <span class="eyebrow">Cliente</span>
+    <h1>Minha Agenda</h1>
+    <p class="lead mb-0">Data, horário, serviço, local e status de cada atendimento.</p>
+  </div>
+  <div class="page-header__actions">
+    <a class="btn" href="{% url 'agenda:novo_agendamento' %}">
+      <svg class="icon" aria-hidden="true"><use href="#i-calendar-plus"></use></svg> Novo agendamento
+    </a>
+  </div>
+</header>
 
-<form method="get" class="filtro-periodo" style="margin-bottom: 1.5rem;">
-  <fieldset style="display: inline-block; padding: 0.8rem 1.2rem;">
-    <legend>Filtrar por período</legend>
-    <div style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
-      <div class="campo" style="margin-bottom: 0;">
-        <label for="id_data_inicio">Data inicial</label>
-        <input type="date" name="data_inicio" id="id_data_inicio" value="{{ data_inicio }}">
-      </div>
-      <div class="campo" style="margin-bottom: 0;">
-        <label for="id_data_fim">Data final</label>
-        <input type="date" name="data_fim" id="id_data_fim" value="{{ data_fim }}">
-      </div>
-      <div>
-        <button type="submit">Filtrar</button>
-        {% if data_inicio or data_fim %}
-          <a href="{% url 'agenda:agenda_cliente' %}" style="margin-left: 0.5rem;">Limpar</a>
-        {% endif %}
-      </div>
-    </div>
-  </fieldset>
+<form method="get" class="filtro-periodo filter-bar filter-bar--compact" role="search" aria-label="Filtrar por período">
+  <div class="campo mb-0">
+    <label for="id_data_inicio">Data inicial</label>
+    <input type="date" name="data_inicio" id="id_data_inicio" value="{{ data_inicio }}">
+  </div>
+  <div class="campo mb-0">
+    <label for="id_data_fim">Data final</label>
+    <input type="date" name="data_fim" id="id_data_fim" value="{{ data_fim }}">
+  </div>
+  <div class="filter-bar__actions">
+    <button type="submit" class="btn">
+      <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg> Filtrar
+    </button>
+    {% if data_inicio or data_fim %}
+      <a class="btn btn--ghost" href="{% url 'agenda:agenda_cliente' %}">Limpar</a>
+    {% endif %}
+  </div>
 </form>
 
 {% if agendamentos %}
-<table>
+<div class="table-wrap">
+<table class="data-table">
   <thead>
     <tr>
       <th>Data</th>
@@ -37,25 +47,35 @@
       <th>Profissional</th>
       <th>Local</th>
       <th>Status</th>
-      <th>Ações</th>
+      <th class="text-right">Ações</th>
     </tr>
   </thead>
   <tbody>
     {% for agendamento in agendamentos %}
     <tr>
-      <td>{{ agendamento.data|date:"d/m/Y" }}</td>
+      <td class="cell-strong">{{ agendamento.data|date:"d/m/Y" }}</td>
       <td>{{ agendamento.hora_inicio|time:"H:i" }} - {{ agendamento.hora_fim|time:"H:i" }}</td>
       <td>
         {{ agendamento.servico|default:"Atendimento" }}
         {% if agendamento.eh_recorrente %}
-          <small style="display: block; color: #5a6072;">(Série recorrente)</small>
+          <small class="muted d-block"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-repeat"></use></svg> (Série recorrente)</small>
         {% endif %}
       </td>
       <td>{{ agendamento.profissional }}</td>
       <td>{{ agendamento.sala.nome|default:"-" }}</td>
-      <td>{{ agendamento.get_status_display }}</td>
-      <td class="acoes">
+      <td><span class="badge badge--{{ agendamento.status|lower }}">{{ agendamento.get_status_display }}</span></td>
+      <td class="acoes cell-actions">
         {% if agendamento.status != "CANCELADO" %}
+          <button type="button"
+                  class="botao-abrir-reagendamento"
+                  data-id="{{ agendamento.pk }}"
+                  data-servico="{{ agendamento.servico|default:'Atendimento' }}"
+                  data-profissional="{{ agendamento.profissional }}"
+                  data-data="{{ agendamento.data|date:'d/m/Y' }}"
+                  data-data-iso="{{ agendamento.data|date:'Y-m-d' }}"
+                  data-horario="{{ agendamento.hora_inicio|time:'H:i' }} - {{ agendamento.hora_fim|time:'H:i' }}">
+            Reagendar
+          </button>
           <button type="button"
                   class="botao-abrir-cancelamento"
                   data-id="{{ agendamento.pk }}"
@@ -66,116 +86,97 @@
                   data-recorrente="{% if agendamento.eh_recorrente %}1{% else %}0{% endif %}">
             Cancelar
           </button>
-          <button type="button"
-                  class="botao-abrir-reagendamento"
-                  data-id="{{ agendamento.pk }}"
-                  data-servico="{{ agendamento.servico|default:'Atendimento' }}"
-                  data-profissional="{{ agendamento.profissional }}"
-                  data-data="{{ agendamento.data|date:'d/m/Y' }}"
-                  data-data-iso="{{ agendamento.data|date:'Y-m-d' }}"
-                  data-horario="{{ agendamento.hora_inicio|time:'H:i' }} - {{ agendamento.hora_fim|time:'H:i' }}"
-                  style="margin-left: 0.4rem;">
-            Reagendar
-          </button>
         {% else %}
-          <span style="color: #999; font-size: 0.85rem;">Cancelado</span>
+          <span class="muted text-xs">Cancelado</span>
         {% endif %}
       </td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
+</div>
 {% else %}
-<p>Nenhum atendimento encontrado para o período informado.</p>
+<div class="empty-state">
+  <span class="empty-state__icon"><svg class="icon icon--lg" aria-hidden="true"><use href="#i-calendar"></use></svg></span>
+  <h3>Agenda vazia</h3>
+  <p>Nenhum atendimento encontrado para o período informado.</p>
+  <div class="btn-row">
+    <a class="btn" href="{% url 'agenda:novo_agendamento' %}">Novo agendamento</a>
+  </div>
+</div>
 {% endif %}
 
-<p style="margin-top: 1.5rem;">
-  <a href="{% url 'agenda:novo_agendamento' %}"><button type="button">Novo agendamento</button></a>
-</p>
-
 <!-- Modal de confirmação de cancelamento (RF11, RN10, Issue #50) -->
-<dialog id="modal-cancelamento">
+<dialog id="modal-cancelamento" aria-labelledby="titulo-cancelamento">
   <form method="post" id="form-cancelamento" action="">
     {% csrf_token %}
     <input type="hidden" name="origem" value="{{ request.get_full_path }}">
-    <h2>Confirmar cancelamento</h2>
-    <p>Tem certeza de que deseja cancelar este atendimento?</p>
+    <span class="modal__icon modal__icon--danger"><svg class="icon icon--lg" aria-hidden="true"><use href="#i-alert"></use></svg></span>
+    <h2 id="titulo-cancelamento">Confirmar cancelamento</h2>
+    <p class="muted">Tem certeza de que deseja cancelar este atendimento?</p>
 
-    <div style="background: #f8f9fa; border: 1px solid #ddd; border-radius: 4px; padding: 0.8rem; margin: 1rem 0;">
-      <p style="margin: 0.2rem 0;"><strong>Serviço:</strong> <span id="cancelar-servico"></span></p>
-      <p style="margin: 0.2rem 0;"><strong>Profissional:</strong> <span id="cancelar-profissional"></span></p>
-      <p style="margin: 0.2rem 0;"><strong>Data:</strong> <span id="cancelar-data"></span></p>
-      <p style="margin: 0.2rem 0;"><strong>Horário:</strong> <span id="cancelar-horario"></span></p>
+    <div class="modal__box">
+      <p><strong>Serviço:</strong> <span id="cancelar-servico"></span></p>
+      <p><strong>Profissional:</strong> <span id="cancelar-profissional"></span></p>
+      <p><strong>Data:</strong> <span id="cancelar-data"></span></p>
+      <p><strong>Horário:</strong> <span id="cancelar-horario"></span></p>
     </div>
 
     <!-- Opções de escopo exibidas apenas se for atendimento recorrente -->
-    <div id="bloco-escopo-recorrencia" style="margin: 1rem 0; padding: 0.8rem; background: #fff8f0; border-left: 4px solid #f0ad4e; border-radius: 4px; display: none;">
-      <p style="margin-top: 0; font-weight: bold;">Este atendimento faz parte de uma série recorrente:</p>
-      <div style="margin-bottom: 0.4rem;">
-        <label style="cursor: pointer;">
-          <input type="radio" name="escopo" value="sessao" id="escopo-sessao" checked>
-          <strong>Cancelar somente esta sessão</strong> (as demais semanas continuam agendadas)
-        </label>
-      </div>
-      <div>
-        <label style="cursor: pointer;">
-          <input type="radio" name="escopo" value="serie" id="escopo-serie">
-          <strong>Cancelar todas as sessões da série</strong> (cancela todas as sessões ativas da recorrência)
-        </label>
-      </div>
+    <div id="bloco-escopo-recorrencia" class="alert alert--warning stack-sm" style="display: none;">
+      <p class="cell-strong mb-0">Este atendimento faz parte de uma série recorrente:</p>
+      <label class="check">
+        <input type="radio" name="escopo" value="sessao" id="escopo-sessao" checked>
+        <span><strong>Cancelar somente esta sessão</strong> (as demais semanas continuam agendadas)</span>
+      </label>
+      <label class="check">
+        <input type="radio" name="escopo" value="serie" id="escopo-serie">
+        <span><strong>Cancelar todas as sessões da série</strong> (cancela todas as sessões ativas da recorrência)</span>
+      </label>
     </div>
 
     <p class="ajuda">Ao confirmar, o horário, a sala e o equipamento serão liberados imediatamente para novos agendamentos.</p>
 
-    <div style="margin-top: 1.2rem;">
-      <button type="submit" style="background-color: #b00020; color: #fff; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer;">
-        Confirmar cancelamento
-      </button>
-      <button type="button" id="botao-fechar-cancelamento" style="margin-left: 0.5rem;">
-        Voltar
-      </button>
+    <div class="btn-row btn-row--end">
+      <button type="button" id="botao-fechar-cancelamento" class="btn btn--secondary">Voltar</button>
+      <button type="submit" class="btn btn--danger">Confirmar cancelamento</button>
     </div>
   </form>
 </dialog>
 
 <!-- Modal de reagendamento (RF12, Issue #51) -->
-<dialog id="modal-reagendamento">
-  <h2>Reagendar atendimento</h2>
+<dialog id="modal-reagendamento" aria-labelledby="titulo-reagendamento">
+  <span class="modal__icon"><svg class="icon icon--lg" aria-hidden="true"><use href="#i-repeat"></use></svg></span>
+  <h2 id="titulo-reagendamento">Reagendar atendimento</h2>
 
-  <div style="background: #f8f9fa; border: 1px solid #ddd; border-radius: 4px; padding: 0.8rem; margin-bottom: 1rem;">
-    <p style="margin: 0.2rem 0;"><strong>Serviço:</strong> <span id="reagendar-servico"></span></p>
-    <p style="margin: 0.2rem 0;"><strong>Profissional:</strong> <span id="reagendar-profissional"></span></p>
-    <p style="margin: 0.2rem 0;"><strong>Horário atual:</strong> <span id="reagendar-horario-atual"></span></p>
+  <div class="modal__box">
+    <p><strong>Serviço:</strong> <span id="reagendar-servico"></span></p>
+    <p><strong>Profissional:</strong> <span id="reagendar-profissional"></span></p>
+    <p><strong>Horário atual:</strong> <span id="reagendar-horario-atual"></span></p>
   </div>
 
   <div class="campo">
     <label for="reagendar-data">Nova data</label>
-    <input type="date" id="reagendar-data" style="width: 100%;">
+    <input type="date" id="reagendar-data">
   </div>
 
-  <div id="reagendar-bloco-horarios" style="display: none; margin-top: 0.5rem;">
-    <p style="margin-bottom: 0.4rem;"><strong>Horários disponíveis:</strong></p>
-    <div id="reagendar-lista-horarios" style="display: flex; flex-wrap: wrap; gap: 0.4rem;"></div>
+  <div id="reagendar-bloco-horarios" style="display: none;">
+    <p class="label">Horários disponíveis:</p>
+    <div id="reagendar-lista-horarios" class="slot-grid"></div>
     <input type="hidden" id="reagendar-hora-selecionada">
   </div>
 
-  <div id="reagendar-mensagem" style="display: none; margin-top: 0.5rem;" class="aviso"></div>
+  <div id="reagendar-mensagem" style="display: none;" class="aviso"></div>
 
-  <div id="reagendar-carregando" style="display: none; margin-top: 0.5rem; color: #5a6072;">
+  <div id="reagendar-carregando" class="muted text-sm" style="display: none;">
     Carregando horários...
   </div>
 
-  <p class="ajuda" style="margin-top: 0.8rem;">Selecione uma data e escolha um dos horários disponíveis para confirmar o reagendamento.</p>
+  <p class="ajuda mt-4">Selecione uma data e escolha um dos horários disponíveis para confirmar o reagendamento.</p>
 
-  <div style="margin-top: 1.2rem;">
-    <button type="button" id="botao-confirmar-reagendamento"
-            style="background-color: #1b7f4b; color: #fff; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer;"
-            disabled>
-      Confirmar reagendamento
-    </button>
-    <button type="button" id="botao-fechar-reagendamento" style="margin-left: 0.5rem;">
-      Cancelar
-    </button>
+  <div class="btn-row btn-row--end">
+    <button type="button" id="botao-fechar-reagendamento" class="btn btn--secondary">Cancelar</button>
+    <button type="button" id="botao-confirmar-reagendamento" class="btn" disabled>Confirmar reagendamento</button>
   </div>
 </dialog>
 {% endblock %}
@@ -278,13 +279,9 @@
 
     function selecionarHorario(hora, botao) {
       listaHorarios.querySelectorAll("button").forEach(function (b) {
-        b.style.background = "";
-        b.style.color = "";
-        b.style.fontWeight = "";
+        b.setAttribute("aria-pressed", "false");
       });
-      botao.style.background = "#1b7f4b";
-      botao.style.color = "#fff";
-      botao.style.fontWeight = "bold";
+      botao.setAttribute("aria-pressed", "true");
       horaSelecionada.value = hora;
       btnConfirmar.disabled = false;
       ocultarMensagem();
@@ -313,7 +310,8 @@
             const btn = document.createElement("button");
             btn.type = "button";
             btn.textContent = hora;
-            btn.style.cssText = "padding: 0.35rem 0.75rem; border: 1px solid #1b7f4b; border-radius: 4px; cursor: pointer; background: #fff; color: #1b7f4b;";
+            btn.className = "slot";
+            btn.setAttribute("aria-pressed", "false");
             btn.addEventListener("click", function () { selecionarHorario(hora, btn); });
             listaHorarios.appendChild(btn);
           });

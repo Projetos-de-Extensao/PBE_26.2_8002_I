@@ -1,28 +1,52 @@
 {% extends "agenda/base.html" %}
 
 {% block title %}Confirmar bloqueio{% endblock %}
+{% block topbar_context %}Disponibilidade e bloqueios{% endblock %}
+{% block content_class %}content--narrow{% endblock %}
 
 {% block conteudo %}
-<h1>Confirmar bloqueio</h1>
-<p>Este período tem atendimentos marcados. Confira antes de bloquear:</p>
+<header class="page-header">
+  <div class="page-header__text">
+    <span class="eyebrow">Atenção</span>
+    <h1>Confirmar bloqueio</h1>
+  </div>
+</header>
 
-<table>
-  <tr><th>Horário</th><th>Serviço</th><th>Cliente</th></tr>
-  {% for agendamento in afetados %}
-  <tr>
-    <td>{{ agendamento.hora_inicio|time:"H:i" }} - {{ agendamento.hora_fim|time:"H:i" }}</td>
-    <td>{{ agendamento.servico }}</td>
-    <td>{{ agendamento.cliente }}</td>
-  </tr>
-  {% endfor %}
-</table>
+<div class="alert alert--warning">
+  <svg class="icon" aria-hidden="true"><use href="#i-alert"></use></svg>
+  <div class="alert__body">Este período tem atendimentos marcados. Confira antes de bloquear:</div>
+</div>
 
-<form method="post" action="{% url 'agenda:criar_bloqueio' %}">
+<div class="table-wrap mb-5">
+  <table class="data-table">
+    <thead>
+      <tr><th>Horário</th><th>Serviço</th><th>Cliente</th></tr>
+    </thead>
+    <tbody>
+      {% for agendamento in afetados %}
+      <tr>
+        <td class="cell-strong">{{ agendamento.hora_inicio|time:"H:i" }} - {{ agendamento.hora_fim|time:"H:i" }}</td>
+        <td>{{ agendamento.servico }}</td>
+        <td>{{ agendamento.cliente }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<form method="post" action="{% url 'agenda:criar_bloqueio' %}" class="card">
   {% csrf_token %}
   <input type="hidden" name="confirmar" value="1">
   <input type="hidden" name="origem" value="{{ destino }}">
-  {{ form.as_p }}
-  <button type="submit">Confirmar e bloquear mesmo assim</button>
-  <a href="{{ destino }}">Cancelar</a>
+  {% for erro in form.non_field_errors %}<div class="aviso erro">{{ erro }}</div>{% endfor %}
+  <div class="form-grid">
+    {% for campo in form %}
+      <div class="campo">{{ campo.label_tag }}{{ campo }}{% for erro in campo.errors %}<div class="aviso erro">{{ erro }}</div>{% endfor %}</div>
+    {% endfor %}
+  </div>
+  <div class="btn-row btn-row--end mt-0">
+    <a class="btn btn--secondary" href="{{ destino }}">Cancelar</a>
+    <button type="submit" class="btn btn--danger">Confirmar e bloquear mesmo assim</button>
+  </div>
 </form>
 {% endblock %}

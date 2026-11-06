@@ -1,0 +1,8 @@
+{# Marca da plataforma. Nome provisório: altere aqui para atualizar todas as telas. #}
+<a class="brand" href="{% if user.is_authenticated %}{% if user.perfil.papel == 'administrador' %}{% url 'administracao' %}{% else %}{% url 'inicio' %}{% endif %}{% else %}{% url 'login' %}{% endif %}">
+  <span class="brand__mark"><svg class="icon" aria-hidden="true"><use href="#i-logo"></use></svg></span>
+  <span>
+    <span class="brand__name">Equilibra</span>
+    <span class="brand__tagline">Saúde · Treino · Bem-estar</span>
+  </span>
+</a>

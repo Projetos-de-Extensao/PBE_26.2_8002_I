@@ -1,80 +1,130 @@
 {% extends "agenda/base.html" %}
 
 {% block title %}Disponibilidade e bloqueios{% endblock %}
+{% block topbar_context %}Disponibilidade e bloqueios{% endblock %}
 
 {% block conteudo %}
-<h1>Disponibilidade e Bloqueios</h1>
+<header class="page-header">
+  <div class="page-header__text">
+    <span class="eyebrow">Profissional</span>
+    <h1>Disponibilidade e Bloqueios</h1>
+    <p class="lead mb-0">Defina quando você atende e retire períodos da agenda quando precisar.</p>
+  </div>
+  <div class="page-header__actions">
+    <a class="btn btn--secondary" href="{% url 'agenda:painel_profissional' %}">
+      <svg class="icon" aria-hidden="true"><use href="#i-clipboard"></use></svg> Voltar ao painel
+    </a>
+  </div>
+</header>
 
-<fieldset>
-  <legend>Nova faixa de disponibilidade</legend>
-  <form method="post">
-    {% csrf_token %}
-    <div class="campo">{{ disponibilidade_form.dia_semana.label_tag }}{{ disponibilidade_form.dia_semana }}</div>
-    <div class="campo">{{ disponibilidade_form.hora_inicio.label_tag }}{{ disponibilidade_form.hora_inicio }}</div>
-    <div class="campo">{{ disponibilidade_form.hora_fim.label_tag }}{{ disponibilidade_form.hora_fim }}</div>
-    {% if disponibilidade_form.non_field_errors %}
-      <p class="erro">{{ disponibilidade_form.non_field_errors }}</p>
+<div class="grid grid--2">
+  <section class="stack" aria-labelledby="titulo-disponibilidade">
+    <form method="post" class="card">
+      {% csrf_token %}
+      <fieldset class="stack">
+        <legend id="titulo-disponibilidade">Nova faixa de disponibilidade</legend>
+        <div class="form-grid">
+          <div class="campo">{{ disponibilidade_form.dia_semana.label_tag }}{{ disponibilidade_form.dia_semana }}</div>
+          <div class="campo">{{ disponibilidade_form.hora_inicio.label_tag }}{{ disponibilidade_form.hora_inicio }}</div>
+          <div class="campo">{{ disponibilidade_form.hora_fim.label_tag }}{{ disponibilidade_form.hora_fim }}</div>
+        </div>
+        {% if disponibilidade_form.non_field_errors %}
+          <div class="aviso erro">{{ disponibilidade_form.non_field_errors }}</div>
+        {% endif %}
+        <button type="submit" name="salvar_disponibilidade" value="1" class="btn">
+          <svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg> Salvar disponibilidade
+        </button>
+      </fieldset>
+    </form>
+
+    {% if faixas %}
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr><th>Dia</th><th>Início</th><th>Fim</th><th><span class="sr-only">Ações</span></th></tr>
+        </thead>
+        <tbody>
+          {% for faixa in faixas %}
+          <tr>
+            <td class="cell-strong">{{ faixa.get_dia_semana_display }}</td>
+            <td>{{ faixa.hora_inicio|time:"H:i" }}</td>
+            <td>{{ faixa.hora_fim|time:"H:i" }}</td>
+            <td class="acoes cell-actions">
+              <form method="post" action="{% url 'agenda:remover_disponibilidade' faixa.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn--danger-outline btn--sm">
+                  <svg class="icon icon--sm" aria-hidden="true"><use href="#i-trash"></use></svg> Remover
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <span class="empty-state__icon"><svg class="icon icon--lg" aria-hidden="true"><use href="#i-clock"></use></svg></span>
+      <h3>Sem disponibilidade</h3>
+      <p>Nenhuma faixa cadastrada.</p>
+    </div>
     {% endif %}
-    <button type="submit" name="salvar_disponibilidade" value="1">Salvar disponibilidade</button>
-  </form>
-</fieldset>
+  </section>
 
-{% if faixas %}
-<table>
-  <tr><th>Dia</th><th>Início</th><th>Fim</th><th></th></tr>
-  {% for faixa in faixas %}
-  <tr>
-    <td>{{ faixa.get_dia_semana_display }}</td>
-    <td>{{ faixa.hora_inicio|time:"H:i" }}</td>
-    <td>{{ faixa.hora_fim|time:"H:i" }}</td>
-    <td class="acoes">
-      <form method="post" action="{% url 'agenda:remover_disponibilidade' faixa.pk %}">
-        {% csrf_token %}
-        <button type="submit">Remover</button>
-      </form>
-    </td>
-  </tr>
-  {% endfor %}
-</table>
-{% else %}
-<p>Nenhuma faixa cadastrada.</p>
-{% endif %}
+  <section class="stack" aria-labelledby="titulo-bloqueio">
+    <form method="post" action="{% url 'agenda:criar_bloqueio' %}" class="card">
+      {% csrf_token %}
+      <input type="hidden" name="origem" value="{% url 'agenda:disponibilidade_bloqueio' %}">
+      <fieldset class="stack">
+        <legend id="titulo-bloqueio">Novo bloqueio</legend>
+        <div class="form-grid">
+          <div class="campo">{{ bloqueio_form.data.label_tag }}{{ bloqueio_form.data }}</div>
+          <div class="campo">{{ bloqueio_form.hora_inicio.label_tag }}{{ bloqueio_form.hora_inicio }}</div>
+          <div class="campo">{{ bloqueio_form.hora_fim.label_tag }}{{ bloqueio_form.hora_fim }}</div>
+        </div>
+        <div class="campo mb-0">{{ bloqueio_form.motivo.label_tag }}{{ bloqueio_form.motivo }}</div>
+        {% if bloqueio_form.non_field_errors %}
+          <div class="aviso erro">{{ bloqueio_form.non_field_errors }}</div>
+        {% endif %}
+        <button type="submit" class="btn btn--accent">
+          <svg class="icon" aria-hidden="true"><use href="#i-calendar-off"></use></svg> Salvar bloqueio
+        </button>
+      </fieldset>
+    </form>
 
-<fieldset>
-  <legend>Novo bloqueio</legend>
-  <form method="post" action="{% url 'agenda:criar_bloqueio' %}">
-    {% csrf_token %}
-    <input type="hidden" name="origem" value="{% url 'agenda:disponibilidade_bloqueio' %}">
-    <div class="campo">{{ bloqueio_form.data.label_tag }}{{ bloqueio_form.data }}</div>
-    <div class="campo">{{ bloqueio_form.hora_inicio.label_tag }}{{ bloqueio_form.hora_inicio }}</div>
-    <div class="campo">{{ bloqueio_form.hora_fim.label_tag }}{{ bloqueio_form.hora_fim }}</div>
-    <div class="campo">{{ bloqueio_form.motivo.label_tag }}{{ bloqueio_form.motivo }}</div>
-    {% if bloqueio_form.non_field_errors %}
-      <p class="erro">{{ bloqueio_form.non_field_errors }}</p>
+    {% if bloqueios %}
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr><th>Data</th><th>Início</th><th>Fim</th><th>Motivo</th><th><span class="sr-only">Ações</span></th></tr>
+        </thead>
+        <tbody>
+          {% for bloqueio in bloqueios %}
+          <tr>
+            <td class="cell-strong">{{ bloqueio.data|date:"d/m/Y" }}</td>
+            <td>{{ bloqueio.hora_inicio|time:"H:i" }}</td>
+            <td>{{ bloqueio.hora_fim|time:"H:i" }}</td>
+            <td>{{ bloqueio.motivo }}</td>
+            <td class="acoes cell-actions">
+              <form method="post" action="{% url 'agenda:remover_bloqueio' bloqueio.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn--danger-outline btn--sm">
+                  <svg class="icon icon--sm" aria-hidden="true"><use href="#i-trash"></use></svg> Remover
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <span class="empty-state__icon"><svg class="icon icon--lg" aria-hidden="true"><use href="#i-calendar-off"></use></svg></span>
+      <h3>Sem bloqueios</h3>
+      <p>Nenhum bloqueio cadastrado.</p>
+    </div>
     {% endif %}
-    <button type="submit">Salvar bloqueio</button>
-  </form>
-</fieldset>
-
-{% if bloqueios %}
-<table>
-  <tr><th>Data</th><th>Início</th><th>Fim</th><th>Motivo</th><th></th></tr>
-  {% for bloqueio in bloqueios %}
-  <tr>
-    <td>{{ bloqueio.data|date:"d/m/Y" }}</td>
-    <td>{{ bloqueio.hora_inicio|time:"H:i" }}</td>
-    <td>{{ bloqueio.hora_fim|time:"H:i" }}</td>
-    <td>{{ bloqueio.motivo }}</td>
-    <td class="acoes">
-      <form method="post" action="{% url 'agenda:remover_bloqueio' bloqueio.pk %}">
-        {% csrf_token %}
-        <button type="submit">Remover</button>
-      </form>
-    </td>
-  </tr>
-  {% endfor %}
-</table>
-{% else %}
-<p>Nenhum bloqueio cadastrado.</p>
-{% endif %}
+  </section>
+</div>
 {% endblock %}

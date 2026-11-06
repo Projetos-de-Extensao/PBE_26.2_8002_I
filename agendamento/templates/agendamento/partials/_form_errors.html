@@ -1,0 +1,6 @@
+{% if form.non_field_errors %}
+  <div class="alert alert--error" role="alert">
+    <svg class="icon" aria-hidden="true"><use href="#i-alert"></use></svg>
+    <div class="alert__body">{{ form.non_field_errors }}</div>
+  </div>
+{% endif %}

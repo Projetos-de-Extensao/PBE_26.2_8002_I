@@ -1,0 +1,13 @@
+{% if messages %}
+  <div class="messages">
+    {% for message in messages %}
+      <div class="alert alert--{% if message.tags == 'error' %}error{% elif message.tags == 'warning' %}warning{% elif message.tags == 'info' or message.tags == 'debug' %}info{% else %}success{% endif %}" role="status">
+        <svg class="icon" aria-hidden="true"><use href="#i-{% if message.tags == 'error' or message.tags == 'warning' %}alert{% else %}check-circle{% endif %}"></use></svg>
+        <div class="alert__body">{{ message }}</div>
+        <button type="button" class="alert__close" data-dismiss aria-label="Fechar mensagem">
+          <svg class="icon icon--sm" aria-hidden="true"><use href="#i-x"></use></svg>
+        </button>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
