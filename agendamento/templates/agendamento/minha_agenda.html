@@ -15,6 +15,25 @@
     </div>
   </header>
 
+  <form method="get" class="filter-bar filter-bar--compact" role="search" aria-label="Filtrar por período">
+    <div class="field">
+      <label for="id_data_inicio">Data inicial</label>
+      <input type="date" name="data_inicio" id="id_data_inicio" value="{{ data_inicio }}">
+    </div>
+    <div class="field">
+      <label for="id_data_fim">Data final</label>
+      <input type="date" name="data_fim" id="id_data_fim" value="{{ data_fim }}">
+    </div>
+    <div class="filter-bar__actions">
+      <button type="submit" class="btn">
+        <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg> Filtrar
+      </button>
+      {% if filtrando %}
+        <a class="btn btn--ghost" href="{% url 'minha_agenda' %}">Limpar</a>
+      {% endif %}
+    </div>
+  </form>
+
   {% if agendamentos %}
     <ul class="appt-list">
       {% for agendamento in agendamentos %}
@@ -28,23 +47,48 @@
             <p class="appt__meta">
               <span><svg class="icon icon--sm" aria-hidden="true"><use href="#i-clock"></use></svg>{{ agendamento.data_hora_inicio|date:"d/m/Y" }} às {{ agendamento.data_hora_inicio|date:"H:i" }}</span>
               <span><svg class="icon icon--sm" aria-hidden="true"><use href="#i-user"></use></svg>Profissional: {{ agendamento.profissional.nome }}</span>
+              {% if agendamento.sala %}<span><svg class="icon icon--sm" aria-hidden="true"><use href="#i-map-pin"></use></svg>{{ agendamento.sala.nome }}</span>{% endif %}
+              {% if agendamento.recorrencia_id %}<span><svg class="icon icon--sm" aria-hidden="true"><use href="#i-repeat"></use></svg>Série recorrente</span>{% endif %}
             </p>
           </div>
           <div class="appt__aside">
             {% include "agendamento/partials/_status_badge.html" with agendamento=agendamento %}
             {% if agendamento.status != "cancelado" and agendamento.status != "concluido" and agendamento.data_hora_inicio > now %}
-              <form method="post" action="{% url 'cancelar_agendamento' agendamento.pk %}"
-                    data-confirm="Cancelar este agendamento?"
-                    data-confirm-text="{{ agendamento.servico.nome }} em {{ agendamento.data_hora_inicio|date:'d/m/Y' }} às {{ agendamento.data_hora_inicio|date:'H:i' }}. O horário será liberado para outras pessoas."
-                    data-confirm-button="Sim, cancelar">
-                {% csrf_token %}
-                <button type="submit" class="btn btn--danger-outline btn--sm">Cancelar agendamento</button>
-              </form>
+              <div class="row">
+                <button type="button" class="btn btn--secondary btn--sm"
+                        data-reagendar
+                        data-url-horarios="{% url 'horarios_reagendamento' agendamento.pk %}"
+                        data-url-reagendar="{% url 'reagendar_agendamento' agendamento.pk %}"
+                        data-servico="{{ agendamento.servico.nome }}"
+                        data-profissional="{{ agendamento.profissional.nome }}"
+                        data-atual="{{ agendamento.data_hora_inicio|date:'d/m/Y' }} às {{ agendamento.data_hora_inicio|date:'H:i' }}"
+                        data-data-iso="{{ agendamento.data_hora_inicio|date:'Y-m-d' }}">
+                  <svg class="icon icon--sm" aria-hidden="true"><use href="#i-repeat"></use></svg> Reagendar
+                </button>
+                <form method="post" action="{% url 'cancelar_agendamento' agendamento.pk %}"
+                      data-cancelar
+                      data-servico="{{ agendamento.servico.nome }}"
+                      data-quando="{{ agendamento.data_hora_inicio|date:'d/m/Y' }} às {{ agendamento.data_hora_inicio|date:'H:i' }}"
+                      data-recorrente="{% if agendamento.recorrencia_id %}1{% else %}0{% endif %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="escopo" value="sessao">
+                  <button type="submit" class="btn btn--danger-outline btn--sm">Cancelar agendamento</button>
+                </form>
+              </div>
             {% endif %}
           </div>
         </li>
       {% endfor %}
     </ul>
+  {% elif filtrando %}
+    <div class="empty-state">
+      <span class="empty-state__icon"><svg class="icon icon--lg" aria-hidden="true"><use href="#i-search"></use></svg></span>
+      <h3>Nada neste período</h3>
+      <p>Nenhum atendimento encontrado para o período informado.</p>
+      <div class="btn-row">
+        <a class="btn btn--secondary" href="{% url 'minha_agenda' %}">Ver todos</a>
+      </div>
+    </div>
   {% else %}
     <div class="empty-state">
       <span class="empty-state__icon"><svg class="icon icon--lg" aria-hidden="true"><use href="#i-calendar"></use></svg></span>
@@ -55,4 +99,190 @@
       </div>
     </div>
   {% endif %}
+
+  {# Confirmação de cancelamento (UC8). Sem JavaScript, o formulário envia direto. #}
+  <dialog id="modal-cancelamento" aria-labelledby="titulo-cancelamento">
+    <span class="modal__icon modal__icon--danger"><svg class="icon icon--lg" aria-hidden="true"><use href="#i-alert"></use></svg></span>
+    <h2 id="titulo-cancelamento">Cancelar atendimento?</h2>
+    <div class="modal__box">
+      <p><strong>Serviço:</strong> <span data-campo="servico"></span></p>
+      <p><strong>Quando:</strong> <span data-campo="quando"></span></p>
+    </div>
+    <div id="bloco-escopo-recorrencia" class="stack-sm" hidden>
+      <p class="cell-strong mb-0">Este atendimento faz parte de uma série recorrente:</p>
+      <label class="check"><input type="radio" name="escopo_modal" value="sessao" checked> Cancelar somente esta sessão</label>
+      <label class="check"><input type="radio" name="escopo_modal" value="serie"> Cancelar todas as sessões futuras da série</label>
+    </div>
+    <p class="field__help mt-4">O horário, a sala e os equipamentos são liberados na hora para outras pessoas.</p>
+    <div class="btn-row btn-row--end">
+      <button type="button" class="btn btn--secondary" data-fechar>Voltar</button>
+      <button type="button" class="btn btn--danger" data-confirmar-cancelamento>Confirmar cancelamento</button>
+    </div>
+  </dialog>
+
+  {# Reagendamento (UC7). #}
+  <dialog id="modal-reagendamento" aria-labelledby="titulo-reagendamento">
+    <span class="modal__icon"><svg class="icon icon--lg" aria-hidden="true"><use href="#i-repeat"></use></svg></span>
+    <h2 id="titulo-reagendamento">Reagendar atendimento</h2>
+    <div class="modal__box">
+      <p><strong>Serviço:</strong> <span data-campo="servico"></span></p>
+      <p><strong>Profissional:</strong> <span data-campo="profissional"></span></p>
+      <p><strong>Horário atual:</strong> <span data-campo="atual"></span></p>
+    </div>
+    <div class="field">
+      <label for="reagendar-data">Nova data</label>
+      <input type="date" id="reagendar-data">
+    </div>
+    <div class="field mt-4" id="reagendar-bloco-horarios" hidden>
+      <p class="label">Horários disponíveis:</p>
+      <div id="reagendar-lista-horarios" class="slot-grid" role="group" aria-label="Horários disponíveis"></div>
+    </div>
+    <p id="reagendar-carregando" class="muted text-sm mt-4" hidden>Carregando horários...</p>
+    <div id="reagendar-mensagem" class="alert alert--error mt-4" role="alert" hidden></div>
+    <p class="field__help mt-4">O horário atual só é liberado depois que o novo for confirmado.</p>
+    <div class="btn-row btn-row--end">
+      <button type="button" class="btn btn--secondary" data-fechar>Voltar</button>
+      <button type="button" class="btn" id="botao-confirmar-reagendamento" disabled>Confirmar reagendamento</button>
+    </div>
+  </dialog>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    (function () {
+      "use strict";
+      var modalCancelar = document.getElementById("modal-cancelamento");
+      var modalReagendar = document.getElementById("modal-reagendamento");
+      if (!modalCancelar || typeof modalCancelar.showModal !== "function") return;
+
+      document.querySelectorAll("dialog [data-fechar]").forEach(function (botao) {
+        botao.addEventListener("click", function () { botao.closest("dialog").close(); });
+      });
+
+      /* Cancelamento --------------------------------------------------- */
+      var formularioAtual = null;
+      var blocoEscopo = document.getElementById("bloco-escopo-recorrencia");
+      document.querySelectorAll("form[data-cancelar]").forEach(function (form) {
+        form.addEventListener("submit", function (evento) {
+          if (form.dataset.confirmado === "1") return;
+          evento.preventDefault();
+          formularioAtual = form;
+          modalCancelar.querySelector('[data-campo="servico"]').textContent = form.dataset.servico;
+          modalCancelar.querySelector('[data-campo="quando"]').textContent = form.dataset.quando;
+          blocoEscopo.hidden = form.dataset.recorrente !== "1";
+          modalCancelar.querySelector('input[value="sessao"]').checked = true;
+          modalCancelar.showModal();
+        });
+      });
+      modalCancelar.querySelector("[data-confirmar-cancelamento]").addEventListener("click", function () {
+        if (!formularioAtual) return;
+        var escolhido = modalCancelar.querySelector('input[name="escopo_modal"]:checked');
+        formularioAtual.querySelector('input[name="escopo"]').value =
+          blocoEscopo.hidden ? "sessao" : escolhido.value;
+        formularioAtual.dataset.confirmado = "1";
+        modalCancelar.close();
+        formularioAtual.submit();
+      });
+
+      /* Reagendamento --------------------------------------------------- */
+      var inputData = document.getElementById("reagendar-data");
+      var blocoHorarios = document.getElementById("reagendar-bloco-horarios");
+      var lista = document.getElementById("reagendar-lista-horarios");
+      var carregando = document.getElementById("reagendar-carregando");
+      var mensagem = document.getElementById("reagendar-mensagem");
+      var confirmar = document.getElementById("botao-confirmar-reagendamento");
+      var csrf = document.querySelector("[name=csrfmiddlewaretoken]");
+      var atual = null;
+      var horaEscolhida = null;
+
+      function mostrarErro(texto) {
+        mensagem.textContent = texto;
+        mensagem.hidden = false;
+      }
+
+      function limpar() {
+        lista.innerHTML = "";
+        blocoHorarios.hidden = true;
+        mensagem.hidden = true;
+        horaEscolhida = null;
+        confirmar.disabled = true;
+      }
+
+      function carregarHorarios() {
+        limpar();
+        if (!inputData.value || !atual) return;
+        carregando.hidden = false;
+        fetch(atual.dataset.urlHorarios + "?data=" + encodeURIComponent(inputData.value), {
+          headers: { "X-Requested-With": "XMLHttpRequest" }
+        })
+          .then(function (resposta) { return resposta.json(); })
+          .then(function (dados) {
+            carregando.hidden = true;
+            if (dados.erro) { mostrarErro(dados.erro); return; }
+            if (!dados.horarios.length) { mostrarErro("Nenhum horário disponível nesta data."); return; }
+            dados.horarios.forEach(function (hora) {
+              var botao = document.createElement("button");
+              botao.type = "button";
+              botao.className = "slot";
+              botao.textContent = hora;
+              botao.setAttribute("aria-pressed", "false");
+              botao.addEventListener("click", function () {
+                lista.querySelectorAll(".slot").forEach(function (b) { b.setAttribute("aria-pressed", "false"); });
+                botao.setAttribute("aria-pressed", "true");
+                horaEscolhida = hora;
+                confirmar.disabled = false;
+                mensagem.hidden = true;
+              });
+              lista.appendChild(botao);
+            });
+            blocoHorarios.hidden = false;
+          })
+          .catch(function () {
+            carregando.hidden = true;
+            mostrarErro("Não foi possível carregar os horários. Tente novamente.");
+          });
+      }
+
+      document.querySelectorAll("[data-reagendar]").forEach(function (botao) {
+        botao.addEventListener("click", function () {
+          atual = botao;
+          ["servico", "profissional", "atual"].forEach(function (campo) {
+            modalReagendar.querySelector('[data-campo="' + campo + '"]').textContent = botao.dataset[campo];
+          });
+          inputData.value = botao.dataset.dataIso;
+          carregarHorarios();
+          modalReagendar.showModal();
+        });
+      });
+
+      inputData.addEventListener("change", carregarHorarios);
+
+      confirmar.addEventListener("click", function () {
+        if (!atual || !inputData.value || !horaEscolhida) return;
+        confirmar.disabled = true;
+        var dados = new FormData();
+        dados.append("data", inputData.value);
+        dados.append("hora_inicio", horaEscolhida);
+        dados.append("csrfmiddlewaretoken", csrf ? csrf.value : "");
+        fetch(atual.dataset.urlReagendar, {
+          method: "POST",
+          body: dados,
+          headers: { "X-Requested-With": "XMLHttpRequest" }
+        })
+          .then(function (resposta) { return resposta.json(); })
+          .then(function (resultado) {
+            if (resultado.ok) {
+              window.location.reload();
+            } else {
+              mostrarErro(resultado.erro || "Não foi possível reagendar.");
+              confirmar.disabled = false;
+            }
+          })
+          .catch(function () {
+            mostrarErro("Erro de comunicação. Tente novamente.");
+            confirmar.disabled = false;
+          });
+      });
+    })();
+  </script>
 {% endblock %}

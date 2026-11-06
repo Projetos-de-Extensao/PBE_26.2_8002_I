@@ -38,7 +38,23 @@
   </div>
 
   {% if form.fields.horario.choices %}
-    <form method="post" class="card form">
+    {% if conflito %}
+      <div class="alert alert--error" role="alert">
+        <svg class="icon" aria-hidden="true"><use href="#i-alert"></use></svg>
+        <div class="alert__body">
+          <p class="cell-strong">Não foi possível reservar este horário:</p>
+          <ul>
+            {% for motivo in conflito %}<li>{{ motivo }}</li>{% endfor %}
+          </ul>
+        </div>
+      </div>
+    {% endif %}
+
+    <form method="post" class="card form" id="form-agendamento"
+          data-url-previa="{% url 'previa_recorrencia' servico.pk %}"
+          data-confirm="Confirmar agendamento?"
+          data-confirm-text="{{ servico.nome }} com {{ profissional.nome }}. O horário só é reservado se ainda estiver livre."
+          data-confirm-button="Confirmar">
       {% csrf_token %}
       {% include "agendamento/partials/_form_errors.html" %}
       <div class="field{% if form.horario.errors %} field--invalid{% endif %}">
@@ -52,6 +68,41 @@
           <div class="field__error" role="alert">{{ form.horario.errors }}</div>
         {% endif %}
       </div>
+      {% if conflito %}
+        <div class="field" id="sugestoes">
+          {% if sugestoes %}
+            <p class="label">Horários livres sugeridos:</p>
+            <div class="slot-grid">
+              {% for horario in sugestoes %}
+                <button type="submit" class="slot" name="horario" value="{{ horario.isoformat }}">
+                  {{ horario|date:"d/m" }} · {{ horario|time:"H:i" }}
+                </button>
+              {% endfor %}
+            </div>
+            <p class="field__help">Clique em um horário para agendar com o mesmo local e equipamentos.</p>
+          {% else %}
+            <p class="field__help">Não encontramos outro horário livre com essas escolhas. Tente outro local, outros equipamentos ou outro profissional.</p>
+          {% endif %}
+        </div>
+      {% endif %}
+      {% if form.sala %}{% include "agendamento/partials/_field.html" with field=form.sala %}{% endif %}
+      {% if form.recursos %}{% include "agendamento/partials/_field.html" with field=form.recursos %}{% endif %}
+
+      <fieldset class="card card--soft stack" id="bloco-recorrencia">
+        <legend class="sr-only">Repetição semanal</legend>
+        {% include "agendamento/partials/_field.html" with field=form.repetir_semanal %}
+        <div class="stack" id="opcoes-recorrencia"{% if not form.repetir_semanal.value %} hidden{% endif %}>
+          {% include "agendamento/partials/_field.html" with field=form.dias_semana %}
+          {% include "agendamento/partials/_field.html" with field=form.data_termino %}
+          <p class="field__help">
+            <svg class="icon icon--sm" aria-hidden="true"><use href="#i-info"></use></svg>
+            Cada data é conferida separadamente. Datas com conflito são descartadas, sem afetar as outras reservas.
+          </p>
+          <button type="button" class="btn btn--secondary" id="botao-ver-previa">
+            <svg class="icon" aria-hidden="true"><use href="#i-repeat"></use></svg> Ver prévia das datas
+          </button>
+        </div>
+      </fieldset>
       <div class="btn-row btn-row--end mt-0">
         <a class="btn btn--ghost" href="{% url 'profissional_detail' profissional.pk %}">Voltar ao perfil</a>
         <button type="submit" class="btn btn--lg">
@@ -69,4 +120,126 @@
       </div>
     </div>
   {% endif %}
+
+  {# Prévia da série semanal (UC6, RF16). #}
+  <dialog id="modal-recorrencia" class="modal--wide" aria-labelledby="titulo-recorrencia">
+    <span class="modal__icon"><svg class="icon icon--lg" aria-hidden="true"><use href="#i-repeat"></use></svg></span>
+    <h2 id="titulo-recorrencia">Prévia da série semanal</h2>
+    <p class="muted">{{ servico.nome }} com {{ profissional.nome }}</p>
+    <div class="metrics">
+      <div class="metric"><span class="valor" id="metrica-total">0</span><span class="rotulo">Total de sessões</span></div>
+      <div class="metric metric--success"><span class="valor" id="metrica-validas">0</span><span class="rotulo">Disponíveis</span></div>
+      <div class="metric metric--danger"><span class="valor" id="metrica-conflitos">0</span><span class="rotulo">Com conflito</span></div>
+    </div>
+    <div id="aviso-recorrencia" class="alert alert--warning" hidden></div>
+    <div class="table-wrap scroll-area">
+      <table id="tabela-sessoes-recorrencia" class="data-table">
+        <thead><tr><th>Data</th><th>Horário</th><th>Situação</th><th>Observação</th></tr></thead>
+        <tbody id="corpo-tabela-recorrencia"></tbody>
+      </table>
+    </div>
+    <div class="btn-row btn-row--end">
+      <button type="button" class="btn btn--secondary" data-fechar>Voltar e ajustar</button>
+      <button type="button" class="btn" id="botao-confirmar-recorrencia">Confirmar criação das sessões</button>
+    </div>
+  </dialog>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    (function () {
+      "use strict";
+      var form = document.getElementById("form-agendamento");
+      var repetir = document.getElementById("id_repetir_semanal");
+      var opcoes = document.getElementById("opcoes-recorrencia");
+      var modal = document.getElementById("modal-recorrencia");
+      if (!form || !repetir || !opcoes) return;
+
+      function atualizar() { opcoes.hidden = !repetir.checked; }
+      repetir.addEventListener("change", atualizar);
+      atualizar();
+
+      if (!modal || typeof modal.showModal !== "function" || !window.fetch) return;
+      var aviso = document.getElementById("aviso-recorrencia");
+      var corpo = document.getElementById("corpo-tabela-recorrencia");
+      var confirmar = document.getElementById("botao-confirmar-recorrencia");
+      modal.querySelector("[data-fechar]").addEventListener("click", function () { modal.close(); });
+
+      function celula(linha, texto) {
+        var td = document.createElement("td");
+        td.textContent = texto;
+        linha.appendChild(td);
+        return td;
+      }
+
+      function mostrarPrevia() {
+        fetch(form.dataset.urlPrevia, {
+          method: "POST",
+          body: new FormData(form),
+          headers: { "X-Requested-With": "XMLHttpRequest" }
+        })
+          .then(function (resposta) { return resposta.json(); })
+          .then(function (dados) {
+            if (!dados.valido) {
+              aviso.textContent = dados.erro || "Confira os dados da repetição.";
+              aviso.hidden = false;
+              corpo.innerHTML = "";
+              ["metrica-total", "metrica-validas", "metrica-conflitos"].forEach(function (id) {
+                document.getElementById(id).textContent = "0";
+              });
+              confirmar.disabled = true;
+              modal.showModal();
+              return;
+            }
+            document.getElementById("metrica-total").textContent = dados.total;
+            document.getElementById("metrica-validas").textContent = dados.total_validas;
+            document.getElementById("metrica-conflitos").textContent = dados.total_conflitos;
+            confirmar.disabled = dados.total_validas === 0;
+            if (dados.total_conflitos > 0) {
+              aviso.textContent = dados.total_validas === 0
+                ? "Todas as sessões têm conflito. Ajuste os dias, o horário ou o período."
+                : dados.total_conflitos + " sessão(ões) com conflito serão descartadas. Serão criadas " + dados.total_validas + ".";
+              aviso.hidden = false;
+            } else {
+              aviso.hidden = true;
+            }
+            corpo.innerHTML = "";
+            dados.sessoes.forEach(function (sessao) {
+              var linha = document.createElement("tr");
+              if (sessao.conflito) linha.className = "linha-conflito";
+              celula(linha, sessao.data_formatada);
+              celula(linha, sessao.horario);
+              var selo = document.createElement("span");
+              selo.className = sessao.conflito ? "badge-conflito" : "badge-valido";
+              selo.textContent = sessao.status;
+              celula(linha, "").appendChild(selo);
+              celula(linha, sessao.conflito ? sessao.motivo : "Pronto para agendar");
+              corpo.appendChild(linha);
+            });
+            modal.showModal();
+          })
+          .catch(function () {
+            aviso.textContent = "Não foi possível carregar a prévia. Tente novamente.";
+            aviso.hidden = false;
+            modal.showModal();
+          });
+      }
+
+      document.getElementById("botao-ver-previa").addEventListener("click", mostrarPrevia);
+
+      // Com repetição marcada, o envio passa pela prévia em vez da confirmação simples.
+      form.addEventListener("submit", function (evento) {
+        if (!repetir.checked || form.dataset.confirmado === "1") return;
+        evento.preventDefault();
+        evento.stopImmediatePropagation();
+        mostrarPrevia();
+      });
+
+      confirmar.addEventListener("click", function () {
+        form.dataset.confirmado = "1";
+        modal.close();
+        form.submit();
+      });
+    })();
+  </script>
 {% endblock %}

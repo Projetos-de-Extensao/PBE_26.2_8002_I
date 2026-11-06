@@ -29,10 +29,9 @@
         <a class="nav__link" href="{% url 'profissional_detail' user.pk %}">
           <svg class="icon" aria-hidden="true"><use href="#i-user"></use></svg> Meu perfil público
         </a>
-        <span class="nav__link" aria-disabled="true" title="Depende de implementação no backend">
-          <svg class="icon" aria-hidden="true"><use href="#i-clock"></use></svg> Disponibilidade
-          <span class="nav__soon">Em breve</span>
-        </span>
+        <a class="nav__link" href="{% url 'disponibilidade_bloqueio' %}"{% if url_name == "disponibilidade_bloqueio" or url_name == "criar_bloqueio" %} aria-current="page"{% endif %}>
+          <svg class="icon" aria-hidden="true"><use href="#i-clock"></use></svg> Disponibilidade e bloqueios
+        </a>
       {% elif papel == "recepcionista" %}
         <p class="nav__title">Recepção</p>
         <span class="nav__link" aria-disabled="true" title="Depende de implementação no backend">

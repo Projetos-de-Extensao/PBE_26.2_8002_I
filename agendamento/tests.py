@@ -1289,3 +1289,1549 @@ class NovoAgendamentoViewTests(TestCase):
 
         self.assertEqual(Agendamento.objects.count(), 1)
         self.assertContains(response, "não está mais disponível")
+
+
+# ---------------------------------------------------------------------------
+# Etapa 1 da unificação: disponibilidade e bloqueios (UC10, UC11, RN05, RN13).
+# Casos de modelo adaptados de src/agenda/tests.py (DisponibilidadeTests e
+# BloqueioTests); casos de tela escritos para as views deste projeto.
+# ---------------------------------------------------------------------------
+from django.core.exceptions import ValidationError  # noqa: E402
+from django.db import IntegrityError, transaction  # noqa: E402
+
+
+def _aware(dia, hora):
+    return timezone.make_aware(datetime.combine(dia, hora))
+
+
+class DisponibilidadeModelTests(TestCase):
+    def setUp(self):
+        self.prof = Profissional.objects.create_user(
+            email="prof-disp@exemplo.com",
+            password="Senha#Forte123",
+            nome="Nutri",
+            especialidade="Nutrição",
+            papel="profissional",
+        )
+
+    def test_hora_fim_deve_ser_posterior(self):
+        faixa = Disponibilidade(
+            profissional=self.prof,
+            dia_semana=0,
+            hora_inicio=time(10),
+            hora_fim=time(9),
+        )
+        with self.assertRaises(ValidationError) as erro:
+            faixa.full_clean()
+        self.assertIn("hora_fim", erro.exception.message_dict)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            faixa.save()
+
+    def test_str(self):
+        faixa = Disponibilidade.objects.create(
+            profissional=self.prof,
+            dia_semana=0,
+            hora_inicio=time(8),
+            hora_fim=time(18),
+        )
+        self.assertIn("Segunda-feira", str(faixa))
+
+
+class BloqueioModelTests(TestCase):
+    def setUp(self):
+        self.cliente = Cliente.objects.create_user(
+            email="cliente-bloq@exemplo.com",
+            password="Senha#Forte123",
+            nome="Cliente",
+            papel="cliente",
+        )
+        self.prof = Profissional.objects.create_user(
+            email="prof-bloq@exemplo.com",
+            password="Senha#Forte123",
+            nome="Nutri",
+            especialidade="Nutrição",
+            papel="profissional",
+        )
+        self.servico = Servico.objects.create(
+            profissional=self.prof,
+            nome="Consulta",
+            tipo="Nutrição",
+            duracao_minutos=60,
+        )
+        self.dia = timezone.localdate() + timedelta(days=7)
+
+    def _agendar(self, dia, hora, **extra):
+        return Agendamento.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            data_hora_inicio=_aware(dia, time(hora)),
+            data_hora_fim=_aware(dia, time(hora + 1)),
+            **extra,
+        )
+
+    def test_hora_fim_deve_ser_posterior(self):
+        bloqueio = Bloqueio(
+            profissional=self.prof,
+            inicio=_aware(self.dia, time(10)),
+            fim=_aware(self.dia, time(9)),
+            motivo="Teste",
+        )
+        with self.assertRaises(ValidationError) as erro:
+            bloqueio.full_clean()
+        self.assertIn("fim", erro.exception.message_dict)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            bloqueio.save()
+
+    def test_agendamentos_afetados_lista_atendimentos_no_periodo(self):
+        agendamento = self._agendar(self.dia, 9)
+        bloqueio = Bloqueio(
+            profissional=self.prof,
+            inicio=_aware(self.dia, time(8)),
+            fim=_aware(self.dia, time(12)),
+            motivo="Férias",
+        )
+        self.assertIn(agendamento, bloqueio.agendamentos_afetados())
+
+    def test_agendamentos_afetados_ignora_outro_dia(self):
+        self._agendar(self.dia + timedelta(days=1), 9)
+        bloqueio = Bloqueio(
+            profissional=self.prof,
+            inicio=_aware(self.dia, time(8)),
+            fim=_aware(self.dia, time(12)),
+            motivo="Férias",
+        )
+        self.assertEqual(bloqueio.agendamentos_afetados().count(), 0)
+
+    def test_agendamentos_afetados_ignora_cancelados(self):
+        self._agendar(self.dia, 9, status=Agendamento.Status.CANCELADO)
+        bloqueio = Bloqueio(
+            profissional=self.prof,
+            inicio=_aware(self.dia, time(8)),
+            fim=_aware(self.dia, time(12)),
+            motivo="Férias",
+        )
+        self.assertEqual(bloqueio.agendamentos_afetados().count(), 0)
+
+    def test_agendamentos_afetados_ignora_horarios_adjacentes(self):
+        self._agendar(self.dia, 12)
+        bloqueio = Bloqueio(
+            profissional=self.prof,
+            inicio=_aware(self.dia, time(8)),
+            fim=_aware(self.dia, time(12)),
+            motivo="Manhã livre",
+        )
+        self.assertEqual(bloqueio.agendamentos_afetados().count(), 0)
+
+
+class DisponibilidadeBloqueioViewTests(TestCase):
+    def setUp(self):
+        self.prof = Profissional.objects.create_user(
+            email="prof-tela@exemplo.com",
+            password="Senha#Forte123",
+            nome="Ana Personal",
+            especialidade="Personal Trainer",
+            papel="profissional",
+        )
+        self.outro_prof = Profissional.objects.create_user(
+            email="outro-prof@exemplo.com",
+            password="Senha#Forte123",
+            nome="Bruno Fisio",
+            especialidade="Fisioterapia",
+            papel="profissional",
+        )
+        self.cliente = Cliente.objects.create_user(
+            email="cliente-tela@exemplo.com",
+            password="Senha#Forte123",
+            nome="Carla Cliente",
+            papel="cliente",
+        )
+        self.servico = Servico.objects.create(
+            profissional=self.prof,
+            nome="Avaliação Física",
+            tipo="Avaliação",
+            duracao_minutos=60,
+        )
+        self.dia = timezone.localdate() + timedelta(days=7)
+        self.url = reverse("disponibilidade_bloqueio")
+
+    def _dados_bloqueio(self, **extra):
+        dados = {
+            "data": self.dia.isoformat(),
+            "hora_inicio": "08:00",
+            "hora_fim": "12:00",
+            "motivo": "Curso",
+        }
+        dados.update(extra)
+        return dados
+
+    # Acesso (RN08) ---------------------------------------------------------
+    def test_exige_login(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+
+    def test_cliente_nao_acessa(self):
+        self.client.force_login(self.cliente)
+        response = self.client.get(self.url)
+        self.assertContains(response, "Acesso negado", status_code=403)
+        response = self.client.post(reverse("criar_bloqueio"), self._dados_bloqueio())
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(Bloqueio.objects.exists())
+
+    def test_profissional_ve_apenas_suas_faixas_e_bloqueios(self):
+        Disponibilidade.objects.create(
+            profissional=self.prof, dia_semana=0, hora_inicio=time(7), hora_fim=time(11)
+        )
+        Disponibilidade.objects.create(
+            profissional=self.outro_prof, dia_semana=2, hora_inicio=time(13), hora_fim=time(17)
+        )
+        Bloqueio.objects.create(
+            profissional=self.outro_prof,
+            inicio=_aware(self.dia, time(8)),
+            fim=_aware(self.dia, time(9)),
+            motivo="Motivo de outra pessoa",
+        )
+        self.client.force_login(self.prof)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Disponibilidade e bloqueios")
+        self.assertEqual(len(response.context["faixas"]), 1)
+        self.assertContains(response, "07:00")
+        self.assertNotContains(response, "13:00")
+        self.assertNotContains(response, "Motivo de outra pessoa")
+
+    # Disponibilidade (UC10, RN05) -----------------------------------------
+    def test_cadastra_faixa_de_disponibilidade(self):
+        self.client.force_login(self.prof)
+        response = self.client.post(
+            self.url, {"dia_semana": 1, "hora_inicio": "08:00", "hora_fim": "12:00"}
+        )
+        self.assertRedirects(response, self.url)
+        faixa = Disponibilidade.objects.get(profissional=self.prof)
+        self.assertEqual((faixa.dia_semana, faixa.hora_inicio, faixa.hora_fim), (1, time(8), time(12)))
+
+    def test_recusa_faixa_com_fim_antes_do_inicio(self):
+        self.client.force_login(self.prof)
+        response = self.client.post(
+            self.url, {"dia_semana": 1, "hora_inicio": "12:00", "hora_fim": "08:00"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "O horário final deve ser posterior ao inicial.")
+        self.assertFalse(Disponibilidade.objects.exists())
+
+    def test_faixa_cadastrada_libera_horarios_no_perfil_publico(self):
+        self.client.force_login(self.prof)
+        self.client.post(
+            self.url,
+            {"dia_semana": self.dia.weekday(), "hora_inicio": "08:00", "hora_fim": "10:00"},
+        )
+        response = self.client.get(reverse("profissional_detail", args=[self.prof.pk]))
+        self.assertContains(response, f"{self.dia:%d/%m/%Y} às 08:00")
+
+    def test_remove_propria_faixa(self):
+        faixa = Disponibilidade.objects.create(
+            profissional=self.prof, dia_semana=0, hora_inicio=time(7), hora_fim=time(11)
+        )
+        self.client.force_login(self.prof)
+        response = self.client.post(reverse("remover_disponibilidade", args=[faixa.pk]))
+        self.assertRedirects(response, self.url)
+        self.assertFalse(Disponibilidade.objects.exists())
+
+    def test_nao_remove_faixa_de_outro_profissional(self):
+        faixa = Disponibilidade.objects.create(
+            profissional=self.outro_prof, dia_semana=0, hora_inicio=time(7), hora_fim=time(11)
+        )
+        self.client.force_login(self.prof)
+        response = self.client.post(reverse("remover_disponibilidade", args=[faixa.pk]))
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(Disponibilidade.objects.filter(pk=faixa.pk).exists())
+
+    def test_remocao_exige_post(self):
+        faixa = Disponibilidade.objects.create(
+            profissional=self.prof, dia_semana=0, hora_inicio=time(7), hora_fim=time(11)
+        )
+        self.client.force_login(self.prof)
+        response = self.client.get(reverse("remover_disponibilidade", args=[faixa.pk]))
+        self.assertEqual(response.status_code, 405)
+        self.assertTrue(Disponibilidade.objects.filter(pk=faixa.pk).exists())
+
+    # Bloqueios (UC11, RN13) -----------------------------------------------
+    def test_cria_bloqueio_sem_atendimentos_afetados(self):
+        self.client.force_login(self.prof)
+        response = self.client.post(reverse("criar_bloqueio"), self._dados_bloqueio())
+        self.assertRedirects(response, self.url)
+        bloqueio = Bloqueio.objects.get(profissional=self.prof)
+        self.assertEqual(bloqueio.inicio, _aware(self.dia, time(8)))
+        self.assertEqual(bloqueio.fim, _aware(self.dia, time(12)))
+        self.assertEqual(bloqueio.motivo, "Curso")
+
+    def test_recusa_bloqueio_com_fim_antes_do_inicio(self):
+        self.client.force_login(self.prof)
+        response = self.client.post(
+            reverse("criar_bloqueio"),
+            self._dados_bloqueio(hora_inicio="12:00", hora_fim="08:00"),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "O horário final deve ser posterior ao inicial.")
+        self.assertFalse(Bloqueio.objects.exists())
+
+    def test_motivo_e_obrigatorio(self):
+        self.client.force_login(self.prof)
+        response = self.client.post(reverse("criar_bloqueio"), self._dados_bloqueio(motivo=""))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Bloqueio.objects.exists())
+
+    def test_bloqueio_com_atendimento_pede_confirmacao(self):
+        Agendamento.objects.create(
+            cliente=self.cliente,
+            profissional=self.prof,
+            servico=self.servico,
+            data_hora_inicio=_aware(self.dia, time(9)),
+            data_hora_fim=_aware(self.dia, time(10)),
+        )
+        self.client.force_login(self.prof)
+        response = self.client.post(reverse("criar_bloqueio"), self._dados_bloqueio())
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "agendamento/confirmar_bloqueio.html")
+        self.assertContains(response, "Carla Cliente")
+        self.assertContains(response, "Confirmar e bloquear mesmo assim")
+        self.assertFalse(Bloqueio.objects.exists())
+
+        response = self.client.post(
+            reverse("criar_bloqueio"), self._dados_bloqueio(confirmar="1")
+        )
+        self.assertRedirects(response, self.url)
+        self.assertEqual(Bloqueio.objects.count(), 1)
+
+    def test_bloqueio_esconde_horario_no_perfil_publico(self):
+        Disponibilidade.objects.create(
+            profissional=self.prof,
+            dia_semana=self.dia.weekday(),
+            hora_inicio=time(8),
+            hora_fim=time(10),
+        )
+        self.client.force_login(self.prof)
+        self.client.post(
+            reverse("criar_bloqueio"),
+            self._dados_bloqueio(hora_inicio="08:00", hora_fim="09:00"),
+        )
+        response = self.client.get(reverse("profissional_detail", args=[self.prof.pk]))
+        self.assertNotContains(response, f"{self.dia:%d/%m/%Y} às 08:00")
+        self.assertContains(response, f"{self.dia:%d/%m/%Y} às 09:00")
+
+    def test_origem_externa_e_ignorada(self):
+        self.client.force_login(self.prof)
+        response = self.client.post(
+            reverse("criar_bloqueio"),
+            self._dados_bloqueio(origem="https://exemplo-malicioso.com/"),
+        )
+        self.assertRedirects(response, self.url)
+
+    def test_remove_proprio_bloqueio(self):
+        bloqueio = Bloqueio.objects.create(
+            profissional=self.prof,
+            inicio=_aware(self.dia, time(8)),
+            fim=_aware(self.dia, time(9)),
+            motivo="Curso",
+        )
+        self.client.force_login(self.prof)
+        response = self.client.post(reverse("remover_bloqueio", args=[bloqueio.pk]))
+        self.assertRedirects(response, self.url)
+        self.assertFalse(Bloqueio.objects.exists())
+
+    def test_nao_remove_bloqueio_de_outro_profissional(self):
+        bloqueio = Bloqueio.objects.create(
+            profissional=self.outro_prof,
+            inicio=_aware(self.dia, time(8)),
+            fim=_aware(self.dia, time(9)),
+            motivo="Curso",
+        )
+        self.client.force_login(self.prof)
+        response = self.client.post(reverse("remover_bloqueio", args=[bloqueio.pk]))
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(Bloqueio.objects.filter(pk=bloqueio.pk).exists())
+
+    def test_menu_do_profissional_leva_a_tela(self):
+        self.client.force_login(self.prof)
+        response = self.client.get(reverse("inicio"))
+        self.assertContains(response, f'href="{self.url}"')
+
+
+# ---------------------------------------------------------------------------
+# Etapa 2 da unificação: validação de conflitos e sugestões de horários
+# (RN01–RN07, RN13, RF09, RF26). Adaptados de src/agenda/tests.py
+# (AgendamentoTests, HorariosLivresTests e NovoAgendamentoViewTests) para
+# data_hora_inicio/data_hora_fim e para vários equipamentos por agendamento.
+# ---------------------------------------------------------------------------
+from agendamento.models import horarios_livres  # noqa: E402
+
+
+class ConflitoAgendamentoModelTests(TestCase):
+    def setUp(self):
+        self.cliente = Cliente.objects.create_user(
+            email="c1@exemplo.com", password="Senha#Forte123", nome="Cliente 1", papel="cliente"
+        )
+        self.cliente2 = Cliente.objects.create_user(
+            email="c2@exemplo.com", password="Senha#Forte123", nome="Cliente 2", papel="cliente"
+        )
+        self.prof = Profissional.objects.create_user(
+            email="p1@exemplo.com", password="Senha#Forte123", nome="Prof 1",
+            especialidade="Nutrição", papel="profissional",
+        )
+        self.prof2 = Profissional.objects.create_user(
+            email="p2@exemplo.com", password="Senha#Forte123", nome="Prof 2",
+            especialidade="Personal Trainer", papel="profissional",
+        )
+        self.dia = timezone.localdate() + timedelta(days=7)
+        for profissional in (self.prof, self.prof2):
+            Disponibilidade.objects.create(
+                profissional=profissional,
+                dia_semana=self.dia.weekday(),
+                hora_inicio=time(8),
+                hora_fim=time(20),
+            )
+        self.servico = Servico.objects.create(
+            profissional=self.prof, nome="Consulta", tipo="Nutrição", duracao_minutos=60
+        )
+        self.sala = Sala.objects.create(nome="Sala 1", capacidade=2)
+        self.sala2 = Sala.objects.create(nome="Sala 2", capacidade=2)
+        self.maca = Recurso.objects.create(nome="Maca", exclusivo=True)
+        self.colchonete = Recurso.objects.create(nome="Colchonete", exclusivo=False)
+
+    def montar(self, cliente=None, profissional=None, inicio=time(9), fim=time(10), **kw):
+        return Agendamento(
+            cliente=cliente or self.cliente,
+            profissional=profissional or self.prof,
+            servico=kw.pop("servico", self.servico),
+            data_hora_inicio=_aware(self.dia, inicio) if inicio else None,
+            data_hora_fim=_aware(self.dia, fim) if fim else None,
+            **kw,
+        )
+
+    def criar(self, recursos=(), **kw):
+        """Cria validando como as views fazem (full_clean + equipamentos)."""
+        agendamento = self.montar(**kw)
+        motivos = agendamento.motivos_conflito(recursos=list(recursos))
+        if motivos:
+            raise ValidationError(motivos)
+        agendamento.full_clean()
+        agendamento.save()
+        agendamento.recursos.set(recursos)
+        return agendamento
+
+    # RN07 -------------------------------------------------------------------
+    def test_hora_fim_calculada_pelo_servico(self):
+        agendamento = self.montar(inicio=time(16), fim=None)
+        agendamento.clean()
+        self.assertEqual(agendamento.data_hora_fim, _aware(self.dia, time(17)))
+
+    def test_hora_fim_informada_prevalece(self):
+        agendamento = self.criar(inicio=time(16), fim=time(16, 30))
+        self.assertEqual(agendamento.data_hora_fim, _aware(self.dia, time(16, 30)))
+
+    def test_hora_fim_deve_ser_posterior(self):
+        for fim in (time(10), time(9)):
+            with self.assertRaises(ValidationError):
+                self.montar(inicio=time(10), fim=fim).full_clean()
+
+    def test_servico_duracao_minima(self):
+        with self.assertRaises(ValidationError):
+            Servico(profissional=self.prof, nome="Rápido", tipo="X", duracao_minutos=0).full_clean()
+
+    def test_status_inicial(self):
+        self.assertEqual(self.criar().status, Agendamento.Status.AGENDADO)
+
+    # RN03 / RN04 ------------------------------------------------------------
+    def test_conflito_de_sala(self):
+        self.criar(sala=self.sala)
+        with self.assertRaisesMessage(ValidationError, "A sala Sala 1 já está reservada"):
+            self.criar(cliente=self.cliente2, profissional=self.prof2,
+                       inicio=time(9, 30), fim=time(10, 30), sala=self.sala)
+
+    def test_salas_diferentes_nao_conflitam(self):
+        self.criar(sala=self.sala)
+        self.criar(cliente=self.cliente2, profissional=self.prof2,
+                   inicio=time(9, 30), fim=time(10, 30), sala=self.sala2)
+
+    def test_conflito_de_recurso_exclusivo(self):
+        self.criar(recursos=[self.maca])
+        with self.assertRaisesMessage(ValidationError, "O equipamento Maca já está reservado"):
+            self.criar(cliente=self.cliente2, profissional=self.prof2,
+                       inicio=time(9, 30), fim=time(10, 30), recursos=[self.maca])
+
+    def test_recurso_compartilhado_nao_conflita(self):
+        self.criar(recursos=[self.colchonete])
+        self.criar(cliente=self.cliente2, profissional=self.prof2,
+                   inicio=time(9, 30), fim=time(10, 30), recursos=[self.colchonete])
+
+    def test_varios_equipamentos_so_o_exclusivo_ocupado_conflita(self):
+        esteira = Recurso.objects.create(nome="Esteira", exclusivo=True)
+        self.criar(recursos=[self.maca, self.colchonete])
+        motivos = self.montar(cliente=self.cliente2, profissional=self.prof2).motivos_conflito(
+            recursos=[esteira, self.colchonete, self.maca]
+        )
+        self.assertEqual(motivos, ["O equipamento Maca já está reservado neste horário."])
+
+    def test_equipamentos_vinculados_sao_considerados_apos_salvar(self):
+        self.criar(recursos=[self.maca])
+        segundo = self.criar(cliente=self.cliente2, profissional=self.prof2,
+                             inicio=time(11), fim=time(12), recursos=[self.maca])
+        segundo.data_hora_inicio = _aware(self.dia, time(9, 30))
+        segundo.data_hora_fim = _aware(self.dia, time(10, 30))
+        with self.assertRaisesMessage(ValidationError, "Maca"):
+            segundo.full_clean()
+
+    def test_sala_livre_apos_cancelamento(self):
+        self.criar(sala=self.sala, status=Agendamento.Status.CANCELADO)
+        self.criar(sala=self.sala)
+
+    # RN01 / RN02 ------------------------------------------------------------
+    def test_conflito_do_profissional(self):
+        self.criar()
+        with self.assertRaisesMessage(ValidationError, "O profissional já possui"):
+            self.criar(cliente=self.cliente2, inicio=time(9, 30), fim=time(10, 30))
+
+    def test_conflito_do_cliente(self):
+        self.criar()
+        with self.assertRaisesMessage(ValidationError, "O cliente já possui"):
+            self.criar(profissional=self.prof2, inicio=time(9, 30), fim=time(10, 30))
+
+    def test_horarios_adjacentes_nao_conflitam(self):
+        self.criar()
+        self.criar(inicio=time(10), fim=time(11))
+
+    def test_cancelado_nao_bloqueia(self):
+        self.criar(status=Agendamento.Status.CANCELADO)
+        self.criar()
+
+    def test_editar_proprio_agendamento(self):
+        agendamento = self.criar(sala=self.sala, recursos=[self.maca])
+        agendamento.status = Agendamento.Status.CONFIRMADO
+        agendamento.full_clean()
+        agendamento.save()
+
+    # RN05 / RN13 ------------------------------------------------------------
+    def test_horario_fora_da_faixa_recusado(self):
+        with self.assertRaisesMessage(ValidationError, "fora da disponibilidade"):
+            self.criar(inicio=time(7), fim=time(8))
+
+    def test_horario_que_ultrapassa_a_faixa_recusado(self):
+        with self.assertRaisesMessage(ValidationError, "fora da disponibilidade"):
+            self.criar(inicio=time(19, 30), fim=time(20, 30))
+
+    def test_horario_dentro_da_faixa_aceito(self):
+        self.criar(inicio=time(8), fim=time(9))
+
+    def test_sem_disponibilidade_cadastrada_recusa(self):
+        Disponibilidade.objects.filter(profissional=self.prof).delete()
+        with self.assertRaises(ValidationError):
+            self.criar()
+
+    def test_bloqueio_recusa_horario(self):
+        Bloqueio.objects.create(
+            profissional=self.prof,
+            inicio=_aware(self.dia, time(9)),
+            fim=_aware(self.dia, time(10)),
+            motivo="Consulta médica",
+        )
+        with self.assertRaisesMessage(ValidationError, "bloqueado pelo profissional"):
+            self.criar(inicio=time(9, 30), fim=time(10, 30))
+
+    # Motivos e compatibilidade ---------------------------------------------
+    def test_motivos_lista_todas_as_regras_violadas(self):
+        self.criar(sala=self.sala)
+        motivos = self.montar(inicio=time(9), fim=time(10), sala=self.sala).motivos_conflito()
+        self.assertEqual(
+            motivos,
+            [
+                Agendamento.MSG_PROFISSIONAL_OCUPADO,
+                Agendamento.MSG_CLIENTE_OCUPADO,
+                "A sala Sala 1 já está reservada neste horário.",
+            ],
+        )
+
+    def test_verificar_conflito_retorna_booleano(self):
+        self.assertFalse(self.montar().verificar_conflito())
+        self.criar()
+        self.assertTrue(self.montar(cliente=self.cliente2).verificar_conflito())
+        with self.assertRaises(ValueError):
+            self.montar(inicio=time(10), fim=time(9)).verificar_conflito()
+
+    def test_concluido_nao_e_revalidado(self):
+        agendamento = self.criar()
+        Disponibilidade.objects.filter(profissional=self.prof).delete()
+        agendamento.status = Agendamento.Status.CONCLUIDO
+        agendamento.full_clean()
+
+
+class HorariosLivresTests(TestCase):
+    def setUp(self):
+        self.cliente = Cliente.objects.create_user(
+            email="c-livres@exemplo.com", password="Senha#Forte123", nome="Cliente", papel="cliente"
+        )
+        self.prof = Profissional.objects.create_user(
+            email="p-livres@exemplo.com", password="Senha#Forte123", nome="Prof",
+            especialidade="Nutrição", papel="profissional",
+        )
+        self.dia = timezone.localdate() + timedelta(days=7)
+        Disponibilidade.objects.create(
+            profissional=self.prof, dia_semana=self.dia.weekday(),
+            hora_inicio=time(8), hora_fim=time(10),
+        )
+        self.servico = Servico.objects.create(
+            profissional=self.prof, nome="Consulta", tipo="Nutrição", duracao_minutos=60
+        )
+
+    def horas(self, livres):
+        return [timezone.localtime(h).time() for h in livres]
+
+    def test_sem_ocupacao_devolve_todas_as_faixas(self):
+        livres = horarios_livres(self.prof, self.dia, duracao_minutos=30)
+        self.assertEqual(self.horas(livres), [time(8), time(8, 30), time(9), time(9, 30)])
+        self.assertTrue(all(timezone.is_aware(h) for h in livres))
+
+    def test_passo_diferente_da_duracao(self):
+        livres = horarios_livres(self.prof, self.dia, duracao_minutos=60, passo_minutos=30)
+        self.assertEqual(self.horas(livres), [time(8), time(8, 30), time(9)])
+
+    def test_bloqueio_esconde_horario(self):
+        Bloqueio.objects.create(
+            profissional=self.prof, inicio=_aware(self.dia, time(9)),
+            fim=_aware(self.dia, time(9, 30)), motivo="Almoço",
+        )
+        self.assertNotIn(time(9), self.horas(horarios_livres(self.prof, self.dia, 30)))
+
+    def test_bloqueio_nao_atrapalha_outro_dia(self):
+        outro_dia = self.dia + timedelta(days=1)
+        Disponibilidade.objects.create(
+            profissional=self.prof, dia_semana=outro_dia.weekday(),
+            hora_inicio=time(8), hora_fim=time(10),
+        )
+        Bloqueio.objects.create(
+            profissional=self.prof, inicio=_aware(self.dia, time(8)),
+            fim=_aware(self.dia, time(10)), motivo="Férias",
+        )
+        livres = horarios_livres(self.prof, outro_dia, duracao_minutos=30)
+        self.assertEqual(self.horas(livres), [time(8), time(8, 30), time(9), time(9, 30)])
+
+    def test_atendimento_ativo_esconde_horario(self):
+        Agendamento.objects.create(
+            cliente=self.cliente, profissional=self.prof, servico=self.servico,
+            data_hora_inicio=_aware(self.dia, time(8)), data_hora_fim=_aware(self.dia, time(9)),
+        )
+        horas = self.horas(horarios_livres(self.prof, self.dia, 30))
+        self.assertNotIn(time(8), horas)
+        self.assertNotIn(time(8, 30), horas)
+        self.assertIn(time(9), horas)
+
+    def test_atendimento_cancelado_nao_esconde_horario(self):
+        Agendamento.objects.create(
+            cliente=self.cliente, profissional=self.prof, servico=self.servico,
+            data_hora_inicio=_aware(self.dia, time(8)), data_hora_fim=_aware(self.dia, time(9)),
+            status=Agendamento.Status.CANCELADO,
+        )
+        self.assertIn(time(8), self.horas(horarios_livres(self.prof, self.dia, 30)))
+
+    def test_dia_sem_faixa_devolve_vazio(self):
+        self.assertEqual(horarios_livres(self.prof, self.dia + timedelta(days=1), 30), [])
+
+
+class NovoAgendamentoConflitoViewTests(TestCase):
+    def setUp(self):
+        self.cliente = Cliente.objects.create_user(
+            email="cliente-conf@exemplo.com", password="Senha#Forte123",
+            nome="João Pereira", papel="cliente",
+        )
+        self.outro_cliente = Cliente.objects.create_user(
+            email="outro-conf@exemplo.com", password="Senha#Forte123",
+            nome="Maria Souza", papel="cliente",
+        )
+        self.prof = Profissional.objects.create_user(
+            email="prof-conf@exemplo.com", password="Senha#Forte123", nome="Ana Silva",
+            especialidade="Personal Trainer", papel="profissional",
+        )
+        self.prof2 = Profissional.objects.create_user(
+            email="prof2-conf@exemplo.com", password="Senha#Forte123", nome="Bruno Lima",
+            especialidade="Fisioterapia", papel="profissional",
+        )
+        self.dia = timezone.localdate() + timedelta(days=1)
+        for profissional in (self.prof, self.prof2):
+            Disponibilidade.objects.create(
+                profissional=profissional, dia_semana=self.dia.weekday(),
+                hora_inicio=time(8), hora_fim=time(12),
+            )
+        self.servico = Servico.objects.create(
+            profissional=self.prof, nome="Treino", tipo="Treinamento", duracao_minutos=60
+        )
+        self.servico2 = Servico.objects.create(
+            profissional=self.prof2, nome="Sessão", tipo="Fisioterapia", duracao_minutos=60
+        )
+        self.sala = Sala.objects.create(nome="Estúdio 1", capacidade=4)
+        self.maca = Recurso.objects.create(nome="Maca", exclusivo=True)
+        self.url = reverse("novo_agendamento", args=[self.servico.pk])
+        self.oito = _aware(self.dia, time(8))
+
+    def ocupar(self, cliente, profissional, servico, inicio, sala=None, recursos=()):
+        agendamento = Agendamento.objects.create(
+            cliente=cliente, profissional=profissional, servico=servico, sala=sala,
+            data_hora_inicio=inicio, data_hora_fim=inicio + timedelta(hours=1),
+        )
+        agendamento.recursos.set(recursos)
+        return agendamento
+
+    def test_tela_mostra_local_equipamentos_e_confirmacao(self):
+        self.client.force_login(self.cliente)
+        response = self.client.get(self.url)
+        self.assertContains(response, "Local")
+        self.assertContains(response, "Equipamentos")
+        self.assertContains(response, "Estúdio 1")
+        self.assertContains(response, 'data-confirm="Confirmar agendamento?"')
+        self.assertNotContains(response, "Não foi possível reservar este horário")
+
+    def test_sem_salas_e_equipamentos_os_campos_somem(self):
+        Sala.objects.all().delete()
+        Recurso.objects.all().delete()
+        self.client.force_login(self.cliente)
+        response = self.client.get(self.url)
+        self.assertNotIn("sala", response.context["form"].fields)
+        self.assertNotIn("recursos", response.context["form"].fields)
+
+    def test_salva_sala_e_equipamentos(self):
+        self.client.force_login(self.cliente)
+        response = self.client.post(
+            self.url,
+            {"horario": self.oito.isoformat(), "sala": self.sala.pk, "recursos": [self.maca.pk]},
+        )
+        self.assertRedirects(response, reverse("profissionais"))
+        agendamento = Agendamento.objects.get()
+        self.assertEqual(agendamento.sala, self.sala)
+        self.assertEqual(list(agendamento.recursos.all()), [self.maca])
+        self.assertEqual(agendamento.data_hora_fim, self.oito + timedelta(hours=1))
+
+    def test_conflito_do_cliente_mostra_motivo_e_sugestoes(self):
+        self.ocupar(self.cliente, self.prof2, self.servico2, self.oito)
+        self.client.force_login(self.cliente)
+        response = self.client.post(self.url, {"horario": self.oito.isoformat()})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "O cliente já possui um agendamento neste horário.")
+        self.assertContains(response, "não está mais disponível")
+        self.assertEqual(Agendamento.objects.count(), 1)
+        sugestoes = response.context["sugestoes"]
+        self.assertTrue(sugestoes)
+        self.assertNotIn(self.oito, sugestoes)
+        self.assertNotIn(self.oito + timedelta(minutes=30), sugestoes)
+        self.assertEqual(sugestoes[0], self.oito + timedelta(hours=1))
+        self.assertContains(response, f'value="{sugestoes[0].isoformat()}"')
+
+    def test_conflito_de_sala_sugere_horarios_com_a_sala_livre(self):
+        self.ocupar(self.outro_cliente, self.prof2, self.servico2, self.oito, sala=self.sala)
+        self.client.force_login(self.cliente)
+        response = self.client.post(
+            self.url, {"horario": self.oito.isoformat(), "sala": self.sala.pk}
+        )
+        self.assertContains(response, "A sala Estúdio 1 já está reservada neste horário.")
+        self.assertFalse(Agendamento.objects.filter(cliente=self.cliente).exists())
+        for sugestao in response.context["sugestoes"]:
+            self.assertGreaterEqual(sugestao, self.oito + timedelta(hours=1))
+
+    def test_conflito_de_equipamento_exclusivo(self):
+        self.ocupar(self.outro_cliente, self.prof2, self.servico2, self.oito, recursos=[self.maca])
+        self.client.force_login(self.cliente)
+        response = self.client.post(
+            self.url, {"horario": self.oito.isoformat(), "recursos": [self.maca.pk]}
+        )
+        self.assertContains(response, "O equipamento Maca já está reservado neste horário.")
+        self.assertFalse(Agendamento.objects.filter(cliente=self.cliente).exists())
+
+    def test_escolher_sugestao_agenda_com_as_mesmas_escolhas(self):
+        self.ocupar(self.outro_cliente, self.prof2, self.servico2, self.oito, sala=self.sala)
+        self.client.force_login(self.cliente)
+        response = self.client.post(
+            self.url, {"horario": self.oito.isoformat(), "sala": self.sala.pk}
+        )
+        sugestao = response.context["sugestoes"][0]
+        # O botão da sugestão envia "horario" de novo, depois do <select>.
+        response = self.client.post(
+            self.url,
+            {"horario": [self.oito.isoformat(), sugestao.isoformat()], "sala": self.sala.pk},
+        )
+        self.assertRedirects(response, reverse("profissionais"))
+        agendamento = Agendamento.objects.get(cliente=self.cliente)
+        self.assertEqual(agendamento.data_hora_inicio, sugestao)
+        self.assertEqual(agendamento.sala, self.sala)
+
+    def test_sem_sugestoes_explica_o_que_fazer(self):
+        self.ocupar(self.outro_cliente, self.prof2, self.servico2, self.oito, recursos=[self.maca])
+        # Maca ocupada em todos os outros horários da lista.
+        outros_horarios = [h for h in self._horarios_da_tela() if h != self.oito]
+        for indice, horario in enumerate(outros_horarios):
+            cliente = Cliente.objects.create_user(
+                email=f"extra{indice}@exemplo.com", password="Senha#Forte123",
+                nome=f"Extra {indice}", papel="cliente",
+            )
+            Agendamento.objects.create(
+                cliente=cliente, profissional=self.prof2, servico=self.servico2,
+                data_hora_inicio=horario, data_hora_fim=horario + timedelta(minutes=30),
+            ).recursos.set([self.maca])
+        self.assertTrue(outros_horarios)
+        self.client.force_login(self.cliente)
+        response = self.client.post(
+            self.url, {"horario": self.oito.isoformat(), "recursos": [self.maca.pk]}
+        )
+        self.assertEqual(response.context["sugestoes"], [])
+        self.assertContains(response, "Não encontramos outro horário livre")
+
+    def _horarios_da_tela(self):
+        self.client.force_login(self.cliente)
+        form = self.client.get(self.url).context["form"]
+        self.client.logout()
+        return [datetime.fromisoformat(valor) for valor, _ in form.fields["horario"].choices]
+
+
+# ---------------------------------------------------------------------------
+# Etapa 3 da unificação: cancelamento, reagendamento e agenda do cliente
+# (UC7, UC8, UC9, RF11, RF12, RF17, RN10). Adaptados de src/agenda/tests.py
+# (CancelamentoAgendamentoTests, ReagendamentoAgendamentoTests e
+# AgendaClienteViewTests).
+# ---------------------------------------------------------------------------
+from agendamento.models import Recorrencia  # noqa: E402
+
+
+class _BaseOperacaoAgenda(TestCase):
+    def setUp(self):
+        self.cliente = Cliente.objects.create_user(
+            email="cli-op@exemplo.com", password="Senha#Forte123", nome="Cliente Op", papel="cliente"
+        )
+        self.cliente2 = Cliente.objects.create_user(
+            email="cli2-op@exemplo.com", password="Senha#Forte123", nome="Cliente Dois", papel="cliente"
+        )
+        self.prof = Profissional.objects.create_user(
+            email="prof-op@exemplo.com", password="Senha#Forte123", nome="Prof Op",
+            especialidade="Personal Trainer", papel="profissional",
+        )
+        self.outro_prof = Profissional.objects.create_user(
+            email="prof2-op@exemplo.com", password="Senha#Forte123", nome="Prof Dois",
+            especialidade="Nutrição", papel="profissional",
+        )
+        self.recepcao = Recepcionista.objects.create_user(
+            email="recepcao-op@exemplo.com", password="Senha#Forte123", nome="Recepção",
+            papel="recepcionista",
+        )
+        for dia in range(7):
+            Disponibilidade.objects.create(
+                profissional=self.prof, dia_semana=dia, hora_inicio=time(8), hora_fim=time(18)
+            )
+        self.servico = Servico.objects.create(
+            profissional=self.prof, nome="Treino", tipo="Treinamento", duracao_minutos=60
+        )
+        self.sala = Sala.objects.create(nome="Sala Funcional", capacidade=4)
+        self.halteres = Recurso.objects.create(nome="Halteres", exclusivo=True)
+        self.dia = timezone.localdate() + timedelta(days=7)
+
+    def agendar(self, cliente=None, dia=None, hora=time(9), recursos=(), **extra):
+        inicio = _aware(dia or self.dia, hora)
+        agendamento = Agendamento.objects.create(
+            cliente=cliente or self.cliente,
+            profissional=extra.pop("profissional", self.prof),
+            servico=extra.pop("servico", self.servico),
+            data_hora_inicio=inicio,
+            data_hora_fim=inicio + timedelta(hours=1),
+            **extra,
+        )
+        agendamento.recursos.set(recursos)
+        return agendamento
+
+    def livre_para(self, cliente, dia=None, hora=time(9), sala=None, recursos=()):
+        inicio = _aware(dia or self.dia, hora)
+        candidato = Agendamento(
+            cliente=cliente, profissional=self.prof, servico=self.servico, sala=sala,
+            data_hora_inicio=inicio, data_hora_fim=inicio + timedelta(hours=1),
+        )
+        return candidato.motivos_conflito(recursos=list(recursos)) == []
+
+
+class CancelamentoAgendamentoTests(_BaseOperacaoAgenda):
+    def test_exige_login_para_cancelar(self):
+        agendamento = self.agendar()
+        response = self.client.post(reverse("cancelar_agendamento", args=[agendamento.pk]))
+        self.assertEqual(response.status_code, 302)
+        agendamento.refresh_from_db()
+        self.assertEqual(agendamento.status, Agendamento.Status.AGENDADO)
+
+    def test_outro_cliente_nao_pode_cancelar(self):
+        agendamento = self.agendar()
+        self.client.force_login(self.cliente2)
+        response = self.client.post(reverse("cancelar_agendamento", args=[agendamento.pk]))
+        self.assertEqual(response.status_code, 404)
+        agendamento.refresh_from_db()
+        self.assertEqual(agendamento.status, Agendamento.Status.AGENDADO)
+
+    def test_outro_profissional_nao_pode_cancelar(self):
+        agendamento = self.agendar()
+        self.client.force_login(self.outro_prof)
+        response = self.client.post(reverse("cancelar_agendamento", args=[agendamento.pk]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_profissional_responsavel_e_recepcao_podem_cancelar(self):
+        for usuario in (self.prof, self.recepcao):
+            with self.subTest(usuario=usuario.nome):
+                agendamento = self.agendar(hora=time(10) if usuario == self.prof else time(11))
+                self.client.force_login(usuario)
+                response = self.client.post(reverse("cancelar_agendamento", args=[agendamento.pk]))
+                self.assertRedirects(response, reverse("inicio"))
+                agendamento.refresh_from_db()
+                self.assertEqual(agendamento.status, Agendamento.Status.CANCELADO)
+
+    def test_cancelar_libera_horario_sala_e_equipamento(self):
+        agendamento = self.agendar(sala=self.sala, recursos=[self.halteres])
+        self.assertFalse(
+            self.livre_para(self.cliente2, sala=self.sala, recursos=[self.halteres])
+        )
+        self.client.force_login(self.cliente)
+        response = self.client.post(
+            reverse("cancelar_agendamento", args=[agendamento.pk]), {"escopo": "sessao"}, follow=True
+        )
+        self.assertContains(response, "Agendamento cancelado.")
+        agendamento.refresh_from_db()
+        self.assertEqual(agendamento.status, Agendamento.Status.CANCELADO)
+        self.assertTrue(
+            self.livre_para(self.cliente2, sala=self.sala, recursos=[self.halteres])
+        )
+
+    def test_nao_cancela_atendimento_passado(self):
+        agendamento = self.agendar(dia=timezone.localdate() - timedelta(days=1))
+        self.client.force_login(self.cliente)
+        response = self.client.post(
+            reverse("cancelar_agendamento", args=[agendamento.pk]), follow=True
+        )
+        self.assertContains(response, "não pode mais ser cancelado")
+        agendamento.refresh_from_db()
+        self.assertEqual(agendamento.status, Agendamento.Status.AGENDADO)
+
+    def _serie(self):
+        recorrencia = Recorrencia.objects.create(padrao="Semanal", data_termino=self.dia + timedelta(days=14))
+        sessoes = [
+            self.agendar(dia=self.dia + timedelta(days=7 * semana), recorrencia=recorrencia,
+                         sala=self.sala, recursos=[self.halteres])
+            for semana in range(3)
+        ]
+        return recorrencia, sessoes
+
+    def test_cancelamento_recorrente_somente_esta_sessao(self):
+        _, (primeira, segunda, terceira) = self._serie()
+        self.client.force_login(self.cliente)
+        self.client.post(reverse("cancelar_agendamento", args=[segunda.pk]), {"escopo": "sessao"})
+        for sessao, status in ((primeira, "agendado"), (segunda, "cancelado"), (terceira, "agendado")):
+            sessao.refresh_from_db()
+            self.assertEqual(sessao.status, status)
+        self.assertTrue(
+            self.livre_para(self.cliente2, dia=self.dia + timedelta(days=7),
+                            sala=self.sala, recursos=[self.halteres])
+        )
+
+    def test_cancelamento_recorrente_toda_a_serie(self):
+        _, sessoes = self._serie()
+        self.client.force_login(self.cliente)
+        response = self.client.post(
+            reverse("cancelar_agendamento", args=[sessoes[1].pk]), {"escopo": "serie"}, follow=True
+        )
+        self.assertContains(response, "Série cancelada: 3 sessão(ões)")
+        for semana, sessao in enumerate(sessoes):
+            sessao.refresh_from_db()
+            self.assertEqual(sessao.status, Agendamento.Status.CANCELADO)
+            self.assertTrue(
+                self.livre_para(self.cliente2, dia=self.dia + timedelta(days=7 * semana),
+                                sala=self.sala, recursos=[self.halteres])
+            )
+
+    def test_cancelar_serie_preserva_sessoes_passadas_e_concluidas(self):
+        recorrencia = Recorrencia.objects.create(padrao="Semanal", data_termino=self.dia)
+        passada = self.agendar(dia=timezone.localdate() - timedelta(days=7), recorrencia=recorrencia,
+                               status=Agendamento.Status.CONCLUIDO)
+        futura = self.agendar(recorrencia=recorrencia)
+        self.assertEqual(recorrencia.cancelar(), 1)
+        passada.refresh_from_db()
+        futura.refresh_from_db()
+        self.assertEqual(passada.status, Agendamento.Status.CONCLUIDO)
+        self.assertEqual(futura.status, Agendamento.Status.CANCELADO)
+
+    def test_escopo_serie_sem_recorrencia_cancela_so_a_sessao(self):
+        agendamento = self.agendar()
+        outro = self.agendar(hora=time(11))
+        self.client.force_login(self.cliente)
+        self.client.post(reverse("cancelar_agendamento", args=[agendamento.pk]), {"escopo": "serie"})
+        outro.refresh_from_db()
+        self.assertEqual(outro.status, Agendamento.Status.AGENDADO)
+
+    def test_template_agenda_cliente_contem_modal_e_botoes(self):
+        self._serie()
+        self.client.force_login(self.cliente)
+        response = self.client.get(reverse("minha_agenda"))
+        self.assertContains(response, 'id="modal-cancelamento"')
+        self.assertContains(response, "data-cancelar")
+        self.assertContains(response, 'data-recorrente="1"')
+        self.assertContains(response, 'id="bloco-escopo-recorrencia"')
+        self.assertContains(response, 'name="escopo" value="sessao"')
+        self.assertContains(response, 'value="serie"')
+        self.assertContains(response, 'id="modal-reagendamento"')
+        self.assertContains(response, "Série recorrente")
+
+
+class ReagendamentoAgendamentoTests(_BaseOperacaoAgenda):
+    def setUp(self):
+        super().setUp()
+        self.agendamento = self.agendar(sala=self.sala, recursos=[self.halteres])
+        self.url = reverse("reagendar_agendamento", args=[self.agendamento.pk])
+        self.url_horarios = reverse("horarios_reagendamento", args=[self.agendamento.pk])
+        self.client.force_login(self.cliente)
+
+    def test_reagendar_libera_horario_antigo_e_reserva_o_novo_com_recursos(self):
+        response = self.client.post(self.url, {"data": self.dia.isoformat(), "hora_inicio": "11:00"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["hora_inicio"], "11:00")
+        self.assertEqual(response.json()["hora_fim"], "12:00")
+        self.agendamento.refresh_from_db()
+        self.assertEqual(self.agendamento.data_hora_inicio, _aware(self.dia, time(11)))
+        self.assertEqual(self.agendamento.data_hora_fim, _aware(self.dia, time(12)))
+        self.assertEqual(self.agendamento.status, Agendamento.Status.AGENDADO)
+        self.assertEqual(self.agendamento.sala, self.sala)
+        self.assertEqual(list(self.agendamento.recursos.all()), [self.halteres])
+
+        horas = [timezone.localtime(h).time() for h in horarios_livres(self.prof, self.dia, 60)]
+        self.assertIn(time(9), horas)
+        self.assertNotIn(time(11), horas)
+        self.assertTrue(
+            self.livre_para(self.cliente2, hora=time(9), sala=self.sala, recursos=[self.halteres])
+        )
+        self.assertFalse(
+            self.livre_para(self.cliente2, hora=time(11), sala=self.sala, recursos=[self.halteres])
+        )
+
+    def test_mensagem_de_sucesso_na_agenda(self):
+        self.client.post(self.url, {"data": self.dia.isoformat(), "hora_inicio": "11:00"})
+        response = self.client.get(reverse("minha_agenda"))
+        self.assertContains(response, f"Atendimento remarcado para {self.dia:%d/%m/%Y} às 11:00.")
+
+    def test_recusa_horario_em_conflito_e_mantem_o_original(self):
+        self.agendar(cliente=self.cliente2, hora=time(11), sala=self.sala)
+        response = self.client.post(self.url, {"data": self.dia.isoformat(), "hora_inicio": "11:00"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("O profissional já possui", response.json()["erro"])
+        self.agendamento.refresh_from_db()
+        self.assertEqual(self.agendamento.data_hora_inicio, _aware(self.dia, time(9)))
+
+    def test_recusa_conflito_de_equipamento_com_outro_profissional(self):
+        outro_servico = Servico.objects.create(
+            profissional=self.outro_prof, nome="Consulta", tipo="Nutrição", duracao_minutos=60
+        )
+        self.agendar(cliente=self.cliente2, hora=time(14), profissional=self.outro_prof,
+                     servico=outro_servico, recursos=[self.halteres])
+        response = self.client.post(self.url, {"data": self.dia.isoformat(), "hora_inicio": "14:00"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Halteres", response.json()["erro"])
+
+    def test_recusa_horario_fora_da_disponibilidade(self):
+        response = self.client.post(self.url, {"data": self.dia.isoformat(), "hora_inicio": "18:00"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("fora da disponibilidade", response.json()["erro"])
+
+    def test_recusa_mesmo_horario_e_horario_passado(self):
+        response = self.client.post(self.url, {"data": self.dia.isoformat(), "hora_inicio": "09:00"})
+        self.assertEqual(response.status_code, 400)
+        ontem = timezone.localdate() - timedelta(days=1)
+        response = self.client.post(self.url, {"data": ontem.isoformat(), "hora_inicio": "10:00"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_dados_invalidos(self):
+        for dados in ({}, {"data": "amanha", "hora_inicio": "10:00"}, {"data": self.dia.isoformat(), "hora_inicio": "25:99"}):
+            with self.subTest(dados=dados):
+                self.assertEqual(self.client.post(self.url, dados).status_code, 400)
+
+    def test_nao_reagenda_cancelado(self):
+        self.agendamento.status = Agendamento.Status.CANCELADO
+        self.agendamento.save()
+        response = self.client.post(self.url, {"data": self.dia.isoformat(), "hora_inicio": "11:00"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_outro_cliente_nao_reagenda(self):
+        self.client.force_login(self.cliente2)
+        response = self.client.post(self.url, {"data": self.dia.isoformat(), "hora_inicio": "11:00"})
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(self.client.get(self.url_horarios, {"data": self.dia.isoformat()}).status_code, 404)
+
+    def test_exige_post(self):
+        self.assertEqual(self.client.get(self.url).status_code, 405)
+
+    def test_horarios_inclui_o_atual_e_respeita_ocupacoes(self):
+        self.agendar(cliente=self.cliente2, hora=time(11))
+        response = self.client.get(self.url_horarios, {"data": self.dia.isoformat()})
+        self.assertEqual(response.status_code, 200)
+        horarios = response.json()["horarios"]
+        self.assertIn("09:00", horarios)
+        self.assertIn("08:00", horarios)
+        self.assertNotIn("10:30", horarios)
+        self.assertNotIn("11:00", horarios)
+        self.assertNotIn("17:30", horarios)
+        self.assertEqual(response.json()["duracao_minutos"], 60)
+
+    def test_horarios_descarta_sala_ocupada(self):
+        Agendamento.objects.create(
+            cliente=self.cliente2, profissional=self.outro_prof,
+            servico=Servico.objects.create(profissional=self.outro_prof, nome="X", tipo="X", duracao_minutos=60),
+            sala=self.sala, data_hora_inicio=_aware(self.dia, time(14)), data_hora_fim=_aware(self.dia, time(15)),
+        )
+        horarios = self.client.get(self.url_horarios, {"data": self.dia.isoformat()}).json()["horarios"]
+        self.assertNotIn("14:00", horarios)
+        self.assertIn("15:00", horarios)
+
+    def test_horarios_valida_parametro_data(self):
+        self.assertEqual(self.client.get(self.url_horarios).status_code, 400)
+        self.assertEqual(self.client.get(self.url_horarios, {"data": "x"}).status_code, 400)
+
+
+class AgendaClienteViewTests(_BaseOperacaoAgenda):
+    def setUp(self):
+        super().setUp()
+        self.url = reverse("minha_agenda")
+        self.base = timezone.localdate() + timedelta(days=10)
+
+    def test_exige_autenticacao(self):
+        self.assertEqual(self.client.get(self.url).status_code, 302)
+
+    def test_exibe_apenas_atendimentos_do_cliente_autenticado(self):
+        meu = self.agendar()
+        alheio = self.agendar(cliente=self.cliente2, hora=time(14))
+        self.client.force_login(self.cliente)
+        agendamentos = list(self.client.get(self.url).context["agendamentos"])
+        self.assertIn(meu, agendamentos)
+        self.assertNotIn(alheio, agendamentos)
+
+    def test_exibe_detalhes_do_atendimento(self):
+        self.agendar(hora=time(16), sala=self.sala, status=Agendamento.Status.CONFIRMADO)
+        self.client.force_login(self.cliente)
+        response = self.client.get(self.url)
+        self.assertContains(response, f"{self.dia:%d/%m/%Y} às 16:00")
+        self.assertContains(response, "Treino")
+        self.assertContains(response, "Prof Op")
+        self.assertContains(response, "Sala Funcional")
+        self.assertContains(response, "Confirmado")
+
+    def test_filtro_por_periodo(self):
+        ag1 = self.agendar(dia=self.base)
+        ag2 = self.agendar(dia=self.base + timedelta(days=5))
+        ag3 = self.agendar(dia=self.base + timedelta(days=15))
+        self.client.force_login(self.cliente)
+
+        def filtrar(**params):
+            return list(self.client.get(self.url, params).context["agendamentos"])
+
+        self.assertEqual(
+            filtrar(data_inicio=(self.base + timedelta(days=1)).isoformat(),
+                    data_fim=(self.base + timedelta(days=10)).isoformat()),
+            [ag2],
+        )
+        self.assertEqual(filtrar(data_inicio=(self.base + timedelta(days=5)).isoformat()), [ag2, ag3])
+        self.assertEqual(filtrar(data_fim=(self.base + timedelta(days=5)).isoformat()), [ag1, ag2])
+
+    def test_filtro_com_formato_invalido_ignorado(self):
+        agendamento = self.agendar()
+        self.client.force_login(self.cliente)
+        response = self.client.get(self.url, {"data_inicio": "data-invalida", "data_fim": "outra"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(response.context["agendamentos"]), [agendamento])
+
+    def test_ordenacao_cronologica(self):
+        ag2 = self.agendar(dia=self.base + timedelta(days=2))
+        ag0 = self.agendar(dia=self.base)
+        ag1 = self.agendar(dia=self.base + timedelta(days=1))
+        self.client.force_login(self.cliente)
+        self.assertEqual(list(self.client.get(self.url).context["agendamentos"]), [ag0, ag1, ag2])
+
+    def test_mensagem_quando_vazio(self):
+        self.client.force_login(self.cliente)
+        self.assertContains(self.client.get(self.url), "Você ainda não tem agendamentos.")
+        self.agendar()
+        response = self.client.get(self.url, {"data_inicio": (self.dia + timedelta(days=1)).isoformat()})
+        self.assertContains(response, "Nenhum atendimento encontrado para o período informado.")
+
+
+# ---------------------------------------------------------------------------
+# Etapa 4 da unificação: recorrência semanal (UC6, RF16, RN11, RN12).
+# Adaptados de src/agenda/tests.py (RecorrenciaModelTests,
+# RecorrenciaGeracaoOcorrenciasTests, NovoAgendamentoRecorrenciaViewTests e
+# PreviaRecorrenciaViewTests).
+# ---------------------------------------------------------------------------
+def _proxima(dia_semana, semanas_a_frente=1):
+    """Próxima data com o dia da semana pedido, a partir da semana que vem."""
+    base = timezone.localdate() + timedelta(days=7 * semanas_a_frente)
+    return base + timedelta(days=(dia_semana - base.weekday()) % 7)
+
+
+class _BaseRecorrencia(TestCase):
+    def setUp(self):
+        self.cliente = Cliente.objects.create_user(
+            email="cli-rec@exemplo.com", password="Senha#Forte123", nome="Cliente Rec", papel="cliente"
+        )
+        self.cliente2 = Cliente.objects.create_user(
+            email="cli2-rec@exemplo.com", password="Senha#Forte123", nome="Cliente Rec 2", papel="cliente"
+        )
+        self.prof = Profissional.objects.create_user(
+            email="prof-rec@exemplo.com", password="Senha#Forte123", nome="Prof Rec",
+            especialidade="Personal Trainer", papel="profissional",
+        )
+        self.outro_prof = Profissional.objects.create_user(
+            email="prof2-rec@exemplo.com", password="Senha#Forte123", nome="Prof Rec 2",
+            especialidade="Nutrição", papel="profissional",
+        )
+        for profissional in (self.prof, self.outro_prof):
+            for dia in range(5):
+                Disponibilidade.objects.create(
+                    profissional=profissional, dia_semana=dia, hora_inicio=time(8), hora_fim=time(18)
+                )
+        self.servico = Servico.objects.create(
+            profissional=self.prof, nome="Treino", tipo="Treinamento", duracao_minutos=60
+        )
+        self.servico_outro = Servico.objects.create(
+            profissional=self.outro_prof, nome="Nutri", tipo="Nutrição", duracao_minutos=60
+        )
+        self.sala = Sala.objects.create(nome="Estúdio A", capacidade=4)
+        self.maca = Recurso.objects.create(nome="Maca", exclusivo=True)
+        self.segunda = _proxima(0)
+
+    def recorrencia(self, **campos):
+        dados = dict(
+            cliente=self.cliente, profissional=self.prof, servico=self.servico,
+            dias_semana=[0], data_inicio=self.segunda,
+            data_termino=self.segunda + timedelta(days=14), hora_inicio=time(9),
+        )
+        dados.update(campos)
+        return Recorrencia(**dados)
+
+    def criar_serie(self, recursos=(), **campos):
+        rec = self.recorrencia(**campos)
+        rec.full_clean()
+        rec.save()
+        rec.recursos.set(recursos)
+        rec.gerar_ocorrencias(recursos=list(recursos))
+        return rec
+
+    def ocupar(self, dia, hora=time(9), cliente=None, profissional=None, servico=None, **extra):
+        inicio = _aware(dia, hora)
+        agendamento = Agendamento.objects.create(
+            cliente=cliente or self.cliente2,
+            profissional=profissional or self.prof,
+            servico=servico or self.servico,
+            data_hora_inicio=inicio,
+            data_hora_fim=inicio + timedelta(hours=1),
+            **{k: v for k, v in extra.items() if k != "recursos"},
+        )
+        agendamento.recursos.set(extra.get("recursos", []))
+        return agendamento
+
+    def datas(self, rec):
+        return [
+            timezone.localtime(a.data_hora_inicio).date()
+            for a in rec.agendamentos.order_by("data_hora_inicio")
+        ]
+
+
+class RecorrenciaModelTests(_BaseRecorrencia):
+    def test_str_e_atributos_basicos(self):
+        rec = self.recorrencia(dias_semana=[0, 2])
+        rec.full_clean()
+        self.assertEqual(rec.padrao, "Semanal")
+        self.assertIn("Segunda-feira, Quarta-feira", str(rec))
+        self.assertIn("09:00", str(rec))
+
+    def test_validacao_dias_semana_vazio(self):
+        with self.assertRaises(ValidationError) as erro:
+            self.recorrencia(dias_semana=[]).clean()
+        self.assertIn("dias_semana", erro.exception.message_dict)
+
+    def test_validacao_dia_invalido(self):
+        with self.assertRaises(ValidationError):
+            self.recorrencia(dias_semana=[7]).clean()
+
+    def test_validacao_data_termino_anterior_a_data_inicio(self):
+        with self.assertRaisesMessage(ValidationError, "A data final deve ser posterior"):
+            self.recorrencia(data_termino=self.segunda - timedelta(days=1)).clean()
+
+    def test_validacao_periodo_sem_dias_correspondentes(self):
+        with self.assertRaisesMessage(ValidationError, "não contempla nenhum dos dias"):
+            self.recorrencia(dias_semana=[0], data_inicio=self.segunda + timedelta(days=1),
+                             data_termino=self.segunda + timedelta(days=2)).clean()
+
+    def test_validacao_periodo_maximo(self):
+        with self.assertRaisesMessage(ValidationError, "no máximo um ano"):
+            self.recorrencia(data_termino=self.segunda + timedelta(days=400)).clean()
+
+    def test_campos_obrigatorios(self):
+        with self.assertRaises(ValidationError) as erro:
+            Recorrencia(data_termino=self.segunda, dias_semana=[0]).clean()
+        for campo in ("cliente", "profissional", "servico", "data_inicio", "hora_inicio"):
+            self.assertIn(campo, erro.exception.message_dict)
+
+    def test_normalizacao_dias_semana(self):
+        rec = self.recorrencia(dias_semana="2, 0, 2")
+        rec.clean()
+        self.assertEqual(rec.dias_semana, [0, 2])
+
+    def test_datas_do_periodo(self):
+        rec = self.recorrencia(dias_semana=[0, 2])
+        self.assertEqual(
+            rec.datas_do_periodo(),
+            [self.segunda, self.segunda + timedelta(days=2), self.segunda + timedelta(days=7),
+             self.segunda + timedelta(days=9), self.segunda + timedelta(days=14)],
+        )
+
+    def test_recorrencia_antiga_sem_vinculos_continua_valida_no_banco(self):
+        rec = Recorrencia.objects.create(padrao="Semanal", data_termino=self.segunda)
+        self.assertIsNone(rec.cliente)
+        self.assertEqual(rec.dias_semana, [])
+
+
+class RecorrenciaGeracaoOcorrenciasTests(_BaseRecorrencia):
+    def test_gera_todas_as_ocorrencias_com_sala_e_equipamento(self):
+        rec = self.criar_serie(recursos=[self.maca], dias_semana=[0, 2], sala=self.sala)
+        self.assertEqual(
+            self.datas(rec),
+            [self.segunda, self.segunda + timedelta(days=2), self.segunda + timedelta(days=7),
+             self.segunda + timedelta(days=9), self.segunda + timedelta(days=14)],
+        )
+        for agendamento in rec.agendamentos.all():
+            self.assertEqual(timezone.localtime(agendamento.data_hora_inicio).time(), time(9))
+            self.assertEqual(timezone.localtime(agendamento.data_hora_fim).time(), time(10))
+            self.assertEqual(agendamento.cliente_id, self.cliente.pk)
+            self.assertEqual(agendamento.profissional_id, self.prof.pk)
+            self.assertEqual(agendamento.servico, self.servico)
+            self.assertEqual(agendamento.sala, self.sala)
+            self.assertEqual(list(agendamento.recursos.all()), [self.maca])
+            self.assertEqual(agendamento.status, Agendamento.Status.AGENDADO)
+
+    def test_gerar_ocorrencias_sem_salvar(self):
+        rec = self.recorrencia()
+        validas, conflitos = rec.gerar_ocorrencias(salvar=False)
+        self.assertEqual(len(validas), 3)
+        self.assertEqual(conflitos, [])
+        self.assertIsNone(rec.pk)
+        self.assertEqual(Agendamento.objects.count(), 0)
+
+    def test_rn11_e_rn12_conflito_individual_descartado_sem_sobrescrever(self):
+        previo = self.ocupar(self.segunda + timedelta(days=7))
+        rec = self.criar_serie()
+        self.assertEqual(self.datas(rec), [self.segunda, self.segunda + timedelta(days=14)])
+        previo.refresh_from_db()
+        self.assertEqual(previo.cliente_id, self.cliente2.pk)
+        self.assertIsNone(previo.recorrencia)
+
+    def test_conflito_com_bloqueio_descartado(self):
+        quarta = self.segunda + timedelta(days=2)
+        Bloqueio.objects.create(
+            profissional=self.prof, inicio=_aware(quarta, time(9)),
+            fim=_aware(quarta, time(11)), motivo="Reunião",
+        )
+        rec = self.criar_serie(dias_semana=[0, 2], data_termino=self.segunda + timedelta(days=7))
+        datas = self.datas(rec)
+        self.assertNotIn(quarta, datas)
+        self.assertIn(self.segunda, datas)
+        self.assertIn(self.segunda + timedelta(days=7), datas)
+
+    def test_conflito_com_agendamento_do_cliente_descartado(self):
+        self.ocupar(self.segunda + timedelta(days=7), cliente=self.cliente,
+                    profissional=self.outro_prof, servico=self.servico_outro)
+        rec = self.criar_serie()
+        self.assertEqual(self.datas(rec), [self.segunda, self.segunda + timedelta(days=14)])
+
+    def test_conflito_de_sala_descartado(self):
+        self.ocupar(self.segunda + timedelta(days=7), profissional=self.outro_prof,
+                    servico=self.servico_outro, sala=self.sala)
+        rec = self.criar_serie(sala=self.sala)
+        self.assertEqual(self.datas(rec), [self.segunda, self.segunda + timedelta(days=14)])
+
+    def test_conflito_de_equipamento_exclusivo_descartado(self):
+        self.ocupar(self.segunda + timedelta(days=14), profissional=self.outro_prof,
+                    servico=self.servico_outro, recursos=[self.maca])
+        rec = self.criar_serie(recursos=[self.maca])
+        self.assertEqual(self.datas(rec), [self.segunda, self.segunda + timedelta(days=7)])
+
+    def test_data_ja_passada_e_descartada(self):
+        rec = self.recorrencia(
+            dias_semana=[0, 1, 2, 3, 4, 5, 6],
+            data_inicio=timezone.localdate() - timedelta(days=2),
+            data_termino=timezone.localdate() + timedelta(days=2),
+        )
+        validas, conflitos = rec.avaliar_ocorrencias()
+        self.assertTrue(any("já passou" in motivo for _, motivo in conflitos))
+        for agendamento in validas:
+            self.assertGreater(agendamento.data_hora_inicio, timezone.now())
+
+    def test_todas_ocorrencias_em_conflito_lanca_validacao(self):
+        Bloqueio.objects.create(
+            profissional=self.prof, inicio=_aware(self.segunda, time(8)),
+            fim=_aware(self.segunda, time(12)), motivo="Curso",
+        )
+        rec = self.recorrencia(data_termino=self.segunda)
+        rec.save()
+        with self.assertRaisesMessage(ValidationError, "todas as datas do período"):
+            rec.gerar_ocorrencias()
+        self.assertEqual(Agendamento.objects.count(), 0)
+
+    def test_cancelar_recorrencia(self):
+        rec = self.criar_serie(data_termino=self.segunda + timedelta(days=7))
+        self.assertEqual(rec.agendamentos.filter(status=Agendamento.Status.AGENDADO).count(), 2)
+        self.assertEqual(rec.cancelar(), 2)
+        self.assertEqual(rec.agendamentos.filter(status=Agendamento.Status.CANCELADO).count(), 2)
+
+
+class NovoAgendamentoRecorrenciaViewTests(_BaseRecorrencia):
+    def setUp(self):
+        super().setUp()
+        self.url = reverse("novo_agendamento", args=[self.servico.pk])
+        self.client.force_login(self.cliente)
+        self.horario = self._primeiro_horario()
+
+    def _primeiro_horario(self):
+        valor = self.client.get(self.url).context["form"].fields["horario"].choices[0][0]
+        return datetime.fromisoformat(valor)
+
+    def post(self, **extra):
+        dados = {"horario": self.horario.isoformat(), "repetir_semanal": "on"}
+        dados.update(extra)
+        return self.client.post(self.url, dados)
+
+    def test_tela_contem_campos_de_recorrencia_e_modal(self):
+        response = self.client.get(self.url)
+        for trecho in ("repetir_semanal", "dias_semana", "data_termino",
+                       'id="modal-recorrencia"', 'id="metrica-total"', 'id="metrica-validas"',
+                       'id="metrica-conflitos"', 'id="tabela-sessoes-recorrencia"',
+                       'id="botao-confirmar-recorrencia"', 'id="botao-ver-previa"'):
+            self.assertContains(response, trecho)
+
+    def test_cria_serie_com_sucesso(self):
+        dia = timezone.localtime(self.horario).date()
+        response = self.post(dias_semana=[str(dia.weekday())],
+                             data_termino=(dia + timedelta(days=14)).isoformat())
+        self.assertRedirects(response, reverse("minha_agenda"))
+        rec = Recorrencia.objects.get()
+        self.assertEqual(rec.cliente_id, self.cliente.pk)
+        self.assertEqual(rec.agendamentos.count(), 3)
+        self.assertEqual(rec.hora_inicio, timezone.localtime(self.horario).time())
+
+    def test_sem_marcar_dias_assume_dia_do_primeiro_horario(self):
+        dia = timezone.localtime(self.horario).date()
+        self.post(data_termino=(dia + timedelta(days=14)).isoformat())
+        rec = Recorrencia.objects.get()
+        self.assertEqual(rec.dias_semana, [dia.weekday()])
+        self.assertEqual(rec.agendamentos.count(), 3)
+
+    def test_conflito_parcial_cria_as_validas_e_avisa(self):
+        dia = timezone.localtime(self.horario).date()
+        self.ocupar(dia + timedelta(days=7), hora=timezone.localtime(self.horario).time())
+        response = self.client.post(
+            self.url,
+            {"horario": self.horario.isoformat(), "repetir_semanal": "on",
+             "data_termino": (dia + timedelta(days=14)).isoformat()},
+            follow=True,
+        )
+        rec = Recorrencia.objects.get()
+        self.assertEqual(rec.agendamentos.count(), 2)
+        self.assertContains(response, "descartadas")
+
+    def test_conflito_total_nao_cria_serie(self):
+        dia = timezone.localtime(self.horario).date()
+        self.ocupar(dia, hora=timezone.localtime(self.horario).time(), cliente=self.cliente,
+                    profissional=self.outro_prof, servico=self.servico_outro)
+        response = self.post(data_termino=dia.isoformat())
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Recorrencia.objects.count(), 0)
+        self.assertContains(response, "apresentaram conflito")
+
+    def test_exige_data_de_termino(self):
+        response = self.post()
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Informe até quando o agendamento deve se repetir.")
+        self.assertEqual(Recorrencia.objects.count(), 0)
+
+    def test_sem_repetir_continua_criando_agendamento_avulso(self):
+        response = self.client.post(self.url, {"horario": self.horario.isoformat()})
+        self.assertRedirects(response, reverse("profissionais"))
+        self.assertEqual(Recorrencia.objects.count(), 0)
+        self.assertEqual(Agendamento.objects.count(), 1)
+
+
+class PreviaRecorrenciaViewTests(_BaseRecorrencia):
+    def setUp(self):
+        super().setUp()
+        self.url = reverse("previa_recorrencia", args=[self.servico.pk])
+        self.url_tela = reverse("novo_agendamento", args=[self.servico.pk])
+
+    def _horario(self):
+        self.client.force_login(self.cliente)
+        valor = self.client.get(self.url_tela).context["form"].fields["horario"].choices[0][0]
+        return datetime.fromisoformat(valor)
+
+    def test_exige_login(self):
+        self.assertEqual(self.client.post(self.url, {}).status_code, 302)
+
+    def test_metodo_get_recusado(self):
+        self.client.force_login(self.cliente)
+        self.assertEqual(self.client.get(self.url).status_code, 405)
+
+    def test_dados_invalidos_retornam_400(self):
+        self.client.force_login(self.cliente)
+        response = self.client.post(self.url, {"repetir_semanal": "on"})
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.json()["valido"])
+
+    def test_data_termino_anterior_retorna_400(self):
+        horario = self._horario()
+        dia = timezone.localtime(horario).date()
+        response = self.client.post(self.url, {
+            "horario": horario.isoformat(), "repetir_semanal": "on",
+            "data_termino": (dia - timedelta(days=1)).isoformat(),
+        })
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("A data final deve ser posterior", response.json()["erro"])
+
+    def test_calcula_datas_e_total_de_sessoes(self):
+        horario = self._horario()
+        dia = timezone.localtime(horario).date()
+        response = self.client.post(self.url, {
+            "horario": horario.isoformat(), "repetir_semanal": "on",
+            "dias_semana": [str(dia.weekday())],
+            "data_termino": (dia + timedelta(days=14)).isoformat(),
+        })
+        self.assertEqual(response.status_code, 200)
+        dados = response.json()
+        self.assertTrue(dados["valido"])
+        self.assertEqual((dados["total"], dados["total_validas"], dados["total_conflitos"]), (3, 3, 0))
+        for sessao in dados["sessoes"]:
+            self.assertFalse(sessao["conflito"])
+            self.assertEqual(sessao["status"], "Disponível")
+        self.assertEqual(Recorrencia.objects.count(), 0)
+        self.assertEqual(Agendamento.objects.count(), 0)
+
+    def test_identifica_conflito_com_motivo(self):
+        horario = self._horario()
+        dia = timezone.localtime(horario).date()
+        self.ocupar(dia + timedelta(days=7), hora=timezone.localtime(horario).time())
+        response = self.client.post(self.url, {
+            "horario": horario.isoformat(), "repetir_semanal": "on",
+            "data_termino": (dia + timedelta(days=14)).isoformat(),
+        })
+        dados = response.json()
+        self.assertEqual((dados["total"], dados["total_validas"], dados["total_conflitos"]), (3, 2, 1))
+        sessao = [s for s in dados["sessoes"] if s["data"] == (dia + timedelta(days=7)).isoformat()][0]
+        self.assertTrue(sessao["conflito"])
+        self.assertEqual(sessao["status"], "Conflito")
+        self.assertIn("já possui um agendamento", sessao["motivo"])
+
+    def test_profissional_nao_gera_previa(self):
+        horario = self._horario()
+        self.client.force_login(self.prof)
+        response = self.client.post(self.url, {
+            "horario": horario.isoformat(), "repetir_semanal": "on",
+            "data_termino": timezone.localtime(horario).date().isoformat(),
+        })
+        self.assertEqual(response.status_code, 403)

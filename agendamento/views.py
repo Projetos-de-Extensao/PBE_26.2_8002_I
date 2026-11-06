@@ -1,4 +1,4 @@
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 
 from django import forms
 from django.contrib import messages
@@ -8,24 +8,28 @@ from django.contrib.auth.views import LoginView as DjangoLoginView
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.http import HttpResponseRedirect
+from django.http import Http404, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext_lazy as _
 from django.views import View
 from django.views.generic import DetailView, FormView, ListView, TemplateView
 
 from agendamento.models import (
     Agendamento,
-    Bloqueio,
     Cliente,
-    Disponibilidade,
+    DIAS_SEMANA,
     Perfil,
     Profissional,
     Recepcionista,
+    Recorrencia,
+    Recurso,
+    Sala,
     Servico,
     Usuario,
+    horarios_livres,
 )
 
 
@@ -62,95 +66,27 @@ def _cliente_para_usuario(usuario):
 
 
 def _proximos_horarios(profissional, servico, quantidade=5):
-    agora = timezone.localtime()
-    hoje = timezone.localdate()
-    ultimo_dia = hoje + timedelta(days=30)
-    disponibilidades = list(
-        profissional.disponibilidades.all()
-    )
-    agendamentos = list(
-        Agendamento.objects.filter(
-            profissional=profissional,
-            data_hora_inicio__lt=timezone.make_aware(
-                datetime.combine(ultimo_dia + timedelta(days=1), time.min)
-            ),
-            data_hora_fim__gt=agora,
-        )
-        .exclude(status=Agendamento.Status.CANCELADO)
-        .only("data_hora_inicio", "data_hora_fim")
-    )
-    bloqueios = list(
-        Bloqueio.objects.filter(
-            profissional=profissional,
-            inicio__lt=timezone.make_aware(
-                datetime.combine(ultimo_dia + timedelta(days=1), time.min)
-            ),
-            fim__gt=agora,
-        ).only("inicio", "fim")
-    )
-    duracao = timedelta(minutes=servico.duracao_minutos)
-    horarios = []
+    """Próximos inícios livres do profissional para o serviço (RF09).
 
+    Usa ``horarios_livres`` dia a dia, com passo de 30 minutos, descartando
+    horários que já passaram.
+    """
+    agora = timezone.now()
+    hoje = timezone.localdate()
+    horarios = []
     for dias_a_frente in range(31):
         data = hoje + timedelta(days=dias_a_frente)
-        for disponibilidade in disponibilidades:
-            if disponibilidade.dia_semana != data.weekday():
-                continue
-
-            inicio = timezone.make_aware(
-                datetime.combine(data, disponibilidade.hora_inicio)
-            )
-            fim_disponivel = timezone.make_aware(
-                datetime.combine(data, disponibilidade.hora_fim)
-            )
-            while inicio + duracao <= fim_disponivel and len(horarios) < quantidade:
-                fim = inicio + duracao
-                ocupado = any(
-                    agendamento.data_hora_inicio < fim
-                    and agendamento.data_hora_fim > inicio
-                    for agendamento in agendamentos
-                ) or any(
-                    bloqueio.inicio < fim and bloqueio.fim > inicio
-                    for bloqueio in bloqueios
-                )
-                if inicio >= agora and not ocupado:
-                    horarios.append(inicio)
-                inicio += timedelta(minutes=30)
-
-            if len(horarios) >= quantidade:
-                break
-        if len(horarios) >= quantidade:
-            break
-
+        for inicio in horarios_livres(
+            profissional,
+            data,
+            duracao_minutos=servico.duracao_minutos,
+            passo_minutos=30,
+        ):
+            if inicio >= agora:
+                horarios.append(inicio)
+                if len(horarios) >= quantidade:
+                    return horarios
     return horarios
-
-
-def _horario_disponivel(profissional, servico, inicio):
-    agora = timezone.now()
-    fim = inicio + timedelta(minutes=servico.duracao_minutos)
-    dentro_da_disponibilidade = profissional.disponibilidades.filter(
-        dia_semana=inicio.weekday(),
-        hora_inicio__lte=inicio.time(),
-        hora_fim__gte=fim.time(),
-    ).exists()
-    if inicio < agora or not dentro_da_disponibilidade:
-        return False
-
-    agendado = (
-        Agendamento.objects.filter(
-            profissional=profissional,
-            data_hora_inicio__lt=fim,
-            data_hora_fim__gt=inicio,
-        )
-        .exclude(status=Agendamento.Status.CANCELADO)
-        .exists()
-    )
-    bloqueado = Bloqueio.objects.filter(
-        profissional=profissional,
-        inicio__lt=fim,
-        fim__gt=inicio,
-    ).exists()
-    return not agendado and not bloqueado
 
 
 class EmailAuthenticationForm(AuthenticationForm):
@@ -466,6 +402,36 @@ class AgendamentoForm(forms.Form):
         },
         widget=forms.Select(attrs={"autocomplete": "off"}),
     )
+    sala = forms.ModelChoiceField(
+        label=_("Local"),
+        queryset=Sala.objects.all(),
+        required=False,
+        empty_label=_("Não preciso de sala"),
+    )
+    recursos = forms.ModelMultipleChoiceField(
+        label=_("Equipamentos"),
+        queryset=Recurso.objects.all(),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        help_text=_("Marque apenas se o atendimento precisar de algum equipamento."),
+    )
+    repetir_semanal = forms.BooleanField(
+        label=_("Repetir semanalmente"),
+        required=False,
+    )
+    dias_semana = forms.TypedMultipleChoiceField(
+        label=_("Dias da semana"),
+        choices=DIAS_SEMANA,
+        coerce=int,
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        help_text=_("Se nenhum dia for marcado, repete no mesmo dia da semana do primeiro horário."),
+    )
+    data_termino = forms.DateField(
+        label=_("Repetir até"),
+        required=False,
+        widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+    )
 
     def __init__(self, *args, horarios, **kwargs):
         super().__init__(*args, **kwargs)
@@ -476,12 +442,50 @@ class AgendamentoForm(forms.Form):
             )
             for horario in horarios
         ]
+        if not Sala.objects.exists():
+            del self.fields["sala"]
+        if not Recurso.objects.exists():
+            del self.fields["recursos"]
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if cleaned_data.get("repetir_semanal") and not cleaned_data.get("data_termino"):
+            self.add_error(
+                "data_termino",
+                _("Informe até quando o agendamento deve se repetir."),
+            )
+        return cleaned_data
+
+    def montar_recorrencia(self, cliente, servico):
+        """Recorrência descrita pelo formulário (ainda não salva)."""
+        inicio = timezone.localtime(
+            datetime.fromisoformat(self.cleaned_data["horario"])
+        )
+        return Recorrencia(
+            padrao=Recorrencia.PADRAO_SEMANAL,
+            cliente=cliente,
+            profissional=servico.profissional,
+            servico=servico,
+            sala=self.cleaned_data.get("sala"),
+            dias_semana=self.cleaned_data.get("dias_semana") or [inicio.weekday()],
+            data_inicio=inicio.date(),
+            data_termino=self.cleaned_data["data_termino"],
+            hora_inicio=inicio.time(),
+        )
 
 
 class NovoAgendamentoView(LoginRequiredMixin, FormView):
+    """Agendamento de um serviço (UC5, RF10).
+
+    Quando o horário não pode ser reservado, a tela informa o motivo e sugere
+    outros horários livres (RF26), preferindo o mesmo dia.
+    """
+
     form_class = AgendamentoForm
     template_name = "agendamento/novo_agendamento.html"
     success_url = reverse_lazy("profissionais")
+    quantidade_horarios = 12
+    quantidade_sugestoes = 6
 
     def dispatch(self, request, *args, **kwargs):
         self.servico = get_object_or_404(
@@ -489,10 +493,18 @@ class NovoAgendamentoView(LoginRequiredMixin, FormView):
             pk=kwargs["servico_id"],
             profissional__is_active=True,
         )
+        self.conflito = []
+        self.sugestoes = []
         return super().dispatch(request, *args, **kwargs)
 
     def get_horarios(self):
-        return _proximos_horarios(self.servico.profissional, self.servico)
+        if not hasattr(self, "_horarios"):
+            self._horarios = _proximos_horarios(
+                self.servico.profissional,
+                self.servico,
+                quantidade=self.quantidade_horarios,
+            )
+        return self._horarios
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
@@ -503,50 +515,200 @@ class NovoAgendamentoView(LoginRequiredMixin, FormView):
         context = super().get_context_data(**kwargs)
         context["servico"] = self.servico
         context["profissional"] = self.servico.profissional
+        context["conflito"] = self.conflito
+        context["sugestoes"] = self.sugestoes
         return context
+
+    def _novo_agendamento(self, cliente, inicio, sala):
+        return Agendamento(
+            cliente=cliente,
+            profissional=self.servico.profissional,
+            servico=self.servico,
+            sala=sala,
+            data_hora_inicio=inicio,
+            data_hora_fim=self.servico.calcular_horario_fim(inicio),
+        )
+
+    def _sugestoes(self, cliente, inicio, sala, recursos):
+        """Outros horários da lista que passam em todas as regras, começando
+        pelos do mesmo dia do horário recusado."""
+        dia = timezone.localtime(inicio).date()
+        candidatos = sorted(
+            (h for h in self.get_horarios() if h != inicio),
+            key=lambda h: (timezone.localtime(h).date() != dia, h),
+        )
+        sugestoes = []
+        for candidato in candidatos:
+            agendamento = self._novo_agendamento(cliente, candidato, sala)
+            if not agendamento.motivos_conflito(recursos=recursos):
+                sugestoes.append(candidato)
+                if len(sugestoes) >= self.quantidade_sugestoes:
+                    break
+        return sugestoes
 
     def form_valid(self, form):
         inicio = datetime.fromisoformat(form.cleaned_data["horario"])
+        sala = form.cleaned_data.get("sala")
+        recursos = list(form.cleaned_data.get("recursos") or [])
         if not Perfil.objects.filter(
             usuario_id=self.request.user.pk,
             papel=Perfil.Papel.CLIENTE,
         ).exists():
             return _acesso_negado(self.request)
         cliente = _cliente_para_usuario(self.request.user)
+        if form.cleaned_data.get("repetir_semanal"):
+            return self._criar_recorrencia(form, cliente, recursos)
 
         with transaction.atomic():
-            profissional = Profissional.objects.select_for_update().get(
+            Profissional.objects.select_for_update().get(
                 pk=self.servico.profissional_id
             )
-            servico = Servico.objects.get(
-                pk=self.servico.pk,
-                profissional=profissional,
-            )
-            if not _horario_disponivel(profissional, servico, inicio):
+            agendamento = self._novo_agendamento(cliente, inicio, sala)
+            if inicio < timezone.now():
+                motivos = [_("Este horário já passou.")]
+            else:
+                motivos = agendamento.motivos_conflito(recursos=recursos)
+            if motivos:
                 form.add_error(
                     "horario",
                     _("Este horário não está mais disponível. Escolha outro."),
                 )
-                return self.form_invalid(form)
-
-            agendamento = Agendamento(
-                cliente=cliente,
-                profissional=profissional,
-                servico=servico,
-                data_hora_inicio=inicio,
-                data_hora_fim=inicio
-                + timedelta(minutes=servico.duracao_minutos),
-            )
-            if agendamento.verificar_conflito():
-                form.add_error(
-                    "horario",
-                    _("Este horário não está mais disponível. Escolha outro."),
-                )
+                self.conflito = motivos
+                self.sugestoes = self._sugestoes(cliente, inicio, sala, recursos)
                 return self.form_invalid(form)
             agendamento.save()
+            agendamento.recursos.set(recursos)
 
         messages.success(self.request, _("Agendamento confirmado com sucesso."))
         return super().form_valid(form)
+
+    def _criar_recorrencia(self, form, cliente, recursos):
+        """Cria a série semanal (UC6): cada sessão é validada isoladamente
+        (RN11) e as que têm conflito são descartadas (RN12)."""
+        recorrencia = form.montar_recorrencia(cliente, self.servico)
+        try:
+            recorrencia.clean()
+        except ValidationError as erro:
+            for campo, mensagens in erro.message_dict.items():
+                destino = campo if campo in form.fields else None
+                for mensagem in mensagens:
+                    form.add_error(destino, mensagem)
+            return self.form_invalid(form)
+
+        with transaction.atomic():
+            Profissional.objects.select_for_update().get(
+                pk=self.servico.profissional_id
+            )
+            validas, conflitos = recorrencia.avaliar_ocorrencias(recursos=recursos)
+            if not validas:
+                self.conflito = [
+                    _("Todas as sessões do período apresentaram conflito: %(motivo)s")
+                    % {"motivo": conflitos[0][1] if conflitos else ""}
+                ]
+                return self.form_invalid(form)
+            recorrencia.save()
+            recorrencia.recursos.set(recursos)
+            validas, conflitos = recorrencia.gerar_ocorrencias(recursos=recursos)
+
+        if conflitos:
+            datas = ", ".join(
+                timezone.localtime(agendamento.data_hora_inicio).strftime("%d/%m/%Y")
+                for agendamento, _motivo in conflitos
+            )
+            messages.warning(
+                self.request,
+                _(
+                    "Série criada com %(validas)s sessão(ões). %(conflitos)s "
+                    "sessão(ões) com conflito foram descartadas (%(datas)s)."
+                )
+                % {"validas": len(validas), "conflitos": len(conflitos), "datas": datas},
+            )
+        else:
+            messages.success(
+                self.request,
+                _("Série criada com sucesso: %(validas)s sessões agendadas.")
+                % {"validas": len(validas)},
+            )
+        return HttpResponseRedirect(reverse("minha_agenda"))
+
+
+class PreviaRecorrenciaView(NovoAgendamentoView):
+    """JSON com cada data da série e se ela está livre ou em conflito (RF16).
+
+    Usa o mesmo formulário e as mesmas regras da criação, sem salvar nada.
+    """
+
+    http_method_names = ["post"]
+
+    def form_invalid(self, form):
+        mensagens = [
+            str(mensagem)
+            for erros in form.errors.values()
+            for mensagem in erros
+        ]
+        return JsonResponse(
+            {"valido": False, "erro": " ".join(mensagens)},
+            status=400,
+        )
+
+    def form_valid(self, form):
+        if not Perfil.objects.filter(
+            usuario_id=self.request.user.pk,
+            papel=Perfil.Papel.CLIENTE,
+        ).exists():
+            return JsonResponse(
+                {"valido": False, "erro": str(_("Apenas clientes podem agendar."))},
+                status=403,
+            )
+        if not form.cleaned_data.get("data_termino"):
+            return JsonResponse(
+                {"valido": False, "erro": str(_("Informe até quando o agendamento deve se repetir."))},
+                status=400,
+            )
+        cliente = _cliente_para_usuario(self.request.user)
+        recorrencia = form.montar_recorrencia(cliente, self.servico)
+        try:
+            recorrencia.clean()
+        except ValidationError as erro:
+            return JsonResponse(
+                {"valido": False, "erro": " ".join(erro.messages)},
+                status=400,
+            )
+
+        recursos = list(form.cleaned_data.get("recursos") or [])
+        validas, conflitos = recorrencia.avaliar_ocorrencias(recursos=recursos)
+        motivos = {
+            timezone.localtime(agendamento.data_hora_inicio).date(): motivo
+            for agendamento, motivo in conflitos
+        }
+        nomes = dict(DIAS_SEMANA)
+        sessoes = []
+        for agendamento in sorted(
+            validas + [agendamento for agendamento, _motivo in conflitos],
+            key=lambda item: item.data_hora_inicio,
+        ):
+            inicio = timezone.localtime(agendamento.data_hora_inicio)
+            fim = timezone.localtime(agendamento.data_hora_fim)
+            conflito = inicio.date() in motivos
+            sessoes.append(
+                {
+                    "data": inicio.date().isoformat(),
+                    "data_formatada": f"{inicio:%d/%m/%Y} ({nomes[inicio.weekday()]})",
+                    "horario": f"{inicio:%H:%M} - {fim:%H:%M}",
+                    "conflito": conflito,
+                    "status": "Conflito" if conflito else "Disponível",
+                    "motivo": motivos.get(inicio.date(), ""),
+                }
+            )
+        return JsonResponse(
+            {
+                "valido": True,
+                "total": len(sessoes),
+                "total_validas": len(validas),
+                "total_conflitos": len(conflitos),
+                "sessoes": sessoes,
+            }
+        )
 
 
 class ClienteRoleRequiredMixin(LoginRequiredMixin):
@@ -563,43 +725,266 @@ class ClienteRoleRequiredMixin(LoginRequiredMixin):
 
 
 class AgendaClienteView(ClienteRoleRequiredMixin, ListView):
+    """Agenda do cliente com filtro opcional por período (UC9, RF17)."""
+
     model = Agendamento
     context_object_name = "agendamentos"
     template_name = "agendamento/minha_agenda.html"
 
+    def _data_do_filtro(self, nome):
+        valor = self.request.GET.get(nome, "").strip()
+        try:
+            return valor, date.fromisoformat(valor) if valor else None
+        except ValueError:
+            return valor, None
+
     def get_queryset(self):
-        return (
+        queryset = (
             Agendamento.objects.filter(cliente=self.cliente)
             .select_related("servico", "profissional", "sala")
+            .prefetch_related("recursos")
             .order_by("data_hora_inicio")
         )
+        _, data_inicio = self._data_do_filtro("data_inicio")
+        _, data_fim = self._data_do_filtro("data_fim")
+        if data_inicio:
+            queryset = queryset.filter(
+                data_hora_inicio__gte=timezone.make_aware(
+                    datetime.combine(data_inicio, time.min)
+                )
+            )
+        if data_fim:
+            queryset = queryset.filter(
+                data_hora_inicio__lt=timezone.make_aware(
+                    datetime.combine(data_fim + timedelta(days=1), time.min)
+                )
+            )
+        return queryset
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["now"] = timezone.now()
+        context["data_inicio"] = self._data_do_filtro("data_inicio")[0]
+        context["data_fim"] = self._data_do_filtro("data_fim")[0]
+        context["filtrando"] = bool(context["data_inicio"] or context["data_fim"])
         return context
 
 
-class CancelarAgendamentoView(ClienteRoleRequiredMixin, View):
+# ---------------------------------------------------------------------------
+# Cancelamento e reagendamento (UC7, UC8, RF11, RF12, RN10).
+# ---------------------------------------------------------------------------
+def _pode_operar_agendamento(usuario, agendamento):
+    """Cliente do atendimento, profissional responsável, recepção (RN14) ou
+    administração podem cancelar e reagendar."""
+    papel = (
+        Perfil.objects.filter(usuario_id=usuario.pk)
+        .values_list("papel", flat=True)
+        .first()
+    )
+    if papel == Perfil.Papel.CLIENTE:
+        return agendamento.cliente_id == usuario.pk
+    if papel == Perfil.Papel.PROFISSIONAL:
+        return agendamento.profissional_id == usuario.pk
+    return papel in (Perfil.Papel.RECEPCIONISTA, Perfil.Papel.ADMINISTRADOR)
+
+
+def _agendamento_operavel(request, pk):
+    """Agendamento que o usuário pode operar; 404 para os demais, sem revelar
+    que o atendimento existe."""
+    agendamento = get_object_or_404(
+        Agendamento.objects.select_related("servico", "profissional", "cliente"),
+        pk=pk,
+    )
+    if not _pode_operar_agendamento(request.user, agendamento):
+        raise Http404
+    return agendamento
+
+
+def _pode_ser_alterado(agendamento):
+    """Só atendimentos futuros e ativos podem ser cancelados ou reagendados."""
+    return (
+        agendamento.status
+        in (Agendamento.Status.AGENDADO, Agendamento.Status.CONFIRMADO)
+        and agendamento.data_hora_inicio > timezone.now()
+    )
+
+
+def _destino_apos_operacao(request):
+    destino = request.POST.get("origem")
+    if destino and url_has_allowed_host_and_scheme(
+        destino,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return destino
+    if Perfil.objects.filter(
+        usuario_id=request.user.pk, papel=Perfil.Papel.CLIENTE
+    ).exists():
+        return reverse("minha_agenda")
+    return reverse("inicio")
+
+
+class CancelarAgendamentoView(LoginRequiredMixin, View):
+    """Cancela uma sessão ou, em atendimentos recorrentes, toda a série."""
+
     http_method_names = ["post"]
 
     def post(self, request, *args, **kwargs):
-        agendamento = get_object_or_404(
-            Agendamento,
-            pk=kwargs["pk"],
-            cliente=self.cliente,
-        )
-        if (
-            agendamento.status
-            in (Agendamento.Status.CANCELADO, Agendamento.Status.CONCLUIDO)
-            or agendamento.data_hora_inicio <= timezone.now()
-        ):
+        agendamento = _agendamento_operavel(request, kwargs["pk"])
+        destino = _destino_apos_operacao(request)
+        if not _pode_ser_alterado(agendamento):
             messages.error(
                 request,
                 _("Este agendamento não pode mais ser cancelado."),
+            )
+            return HttpResponseRedirect(destino)
+
+        if request.POST.get("escopo") == "serie" and agendamento.recorrencia_id:
+            total = agendamento.recorrencia.cancelar()
+            messages.success(
+                request,
+                _(
+                    "Série cancelada: %(total)s sessão(ões) futura(s) cancelada(s). "
+                    "Os horários, a sala e os equipamentos foram liberados."
+                )
+                % {"total": total},
             )
         else:
             agendamento.status = Agendamento.Status.CANCELADO
             agendamento.save(update_fields=["status"])
             messages.success(request, _("Agendamento cancelado."))
-        return HttpResponseRedirect(reverse("minha_agenda"))
+        return HttpResponseRedirect(destino)
+
+
+class HorariosReagendamentoView(LoginRequiredMixin, View):
+    """JSON com os horários livres para remarcar um atendimento numa data.
+
+    O próprio atendimento não conta como ocupado, e só entram horários que
+    passam em todas as regras de conflito com a sala e os equipamentos já
+    reservados.
+    """
+
+    http_method_names = ["get"]
+
+    def get(self, request, *args, **kwargs):
+        agendamento = _agendamento_operavel(request, kwargs["pk"])
+        if not _pode_ser_alterado(agendamento):
+            return JsonResponse(
+                {"erro": _("Este agendamento não pode mais ser reagendado.")},
+                status=400,
+            )
+        valor = request.GET.get("data", "").strip()
+        if not valor:
+            return JsonResponse({"erro": _("Informe a data.")}, status=400)
+        try:
+            data = date.fromisoformat(valor)
+        except ValueError:
+            return JsonResponse(
+                {"erro": _("Formato de data inválido. Use AAAA-MM-DD.")},
+                status=400,
+            )
+
+        agora = timezone.now()
+        duracao = agendamento.servico.duracao_minutos
+        recursos = list(agendamento.recursos.all())
+        horarios = []
+        for inicio in horarios_livres(
+            agendamento.profissional,
+            data,
+            duracao_minutos=duracao,
+            passo_minutos=30,
+            ignorar=agendamento,
+        ):
+            if inicio <= agora:
+                continue
+            candidato = Agendamento(
+                pk=agendamento.pk,
+                cliente_id=agendamento.cliente_id,
+                profissional_id=agendamento.profissional_id,
+                servico_id=agendamento.servico_id,
+                sala_id=agendamento.sala_id,
+                data_hora_inicio=inicio,
+                data_hora_fim=agendamento.servico.calcular_horario_fim(inicio),
+            )
+            if not candidato.motivos_conflito(recursos=recursos):
+                horarios.append(timezone.localtime(inicio).strftime("%H:%M"))
+
+        return JsonResponse(
+            {"horarios": horarios, "data": valor, "duracao_minutos": duracao}
+        )
+
+
+class ReagendarAgendamentoView(LoginRequiredMixin, View):
+    """Remarca um atendimento (UC7). A troca é atômica: o horário antigo só é
+    liberado quando o novo passa em todas as regras."""
+
+    http_method_names = ["post"]
+
+    def post(self, request, *args, **kwargs):
+        agendamento = _agendamento_operavel(request, kwargs["pk"])
+        if not _pode_ser_alterado(agendamento):
+            return JsonResponse(
+                {"erro": _("Este agendamento não pode mais ser reagendado.")},
+                status=400,
+            )
+        nova_data = request.POST.get("data", "").strip()
+        nova_hora = request.POST.get("hora_inicio", "").strip()
+        if not nova_data or not nova_hora:
+            return JsonResponse(
+                {"erro": _("Informe a nova data e o novo horário.")},
+                status=400,
+            )
+        try:
+            inicio = timezone.make_aware(
+                datetime.combine(
+                    date.fromisoformat(nova_data),
+                    time.fromisoformat(nova_hora),
+                )
+            )
+        except ValueError:
+            return JsonResponse(
+                {"erro": _("Data ou horário em formato inválido.")},
+                status=400,
+            )
+        if inicio == agendamento.data_hora_inicio:
+            return JsonResponse(
+                {"erro": _("O novo horário é igual ao atual.")},
+                status=400,
+            )
+        if inicio <= timezone.now():
+            return JsonResponse(
+                {"erro": _("Escolha um horário que ainda não passou.")},
+                status=400,
+            )
+
+        with transaction.atomic():
+            Profissional.objects.select_for_update().get(
+                pk=agendamento.profissional_id
+            )
+            agendamento.data_hora_inicio = inicio
+            agendamento.data_hora_fim = agendamento.servico.calcular_horario_fim(
+                inicio
+            )
+            motivos = agendamento.motivos_conflito()
+            if motivos:
+                return JsonResponse({"erro": " ".join(motivos)}, status=400)
+            agendamento.save(update_fields=["data_hora_inicio", "data_hora_fim"])
+
+        local_inicio = timezone.localtime(agendamento.data_hora_inicio)
+        local_fim = timezone.localtime(agendamento.data_hora_fim)
+        messages.success(
+            request,
+            _("Atendimento remarcado para %(data)s às %(hora)s.")
+            % {
+                "data": local_inicio.strftime("%d/%m/%Y"),
+                "hora": local_inicio.strftime("%H:%M"),
+            },
+        )
+        return JsonResponse(
+            {
+                "ok": True,
+                "data": local_inicio.strftime("%d/%m/%Y"),
+                "hora_inicio": local_inicio.strftime("%H:%M"),
+                "hora_fim": local_fim.strftime("%H:%M"),
+            }
+        )
