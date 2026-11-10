@@ -7,7 +7,7 @@ Uso:
 Use "python iniciar.py --sem-navegador" para não abrir o navegador sozinho.
 
 O script cria o ambiente virtual, instala o Django, aplica as migrações,
-cria um acesso de administrador para demonstração, sobe o servidor e abre o
+cria um acesso de administrador, carrega os dados de exemplo, sobe o servidor e abre o
 navegador. Funciona em Windows, macOS e Linux.
 
 Usa o projeto principal (manage.py da raiz, apps "project" e "agendamento").
@@ -117,6 +117,27 @@ def criar_acesso_demo(python):
         )
 
 
+def carregar_dados_exemplo(python):
+    """Carrega os dados de demonstração quando ainda não há profissionais."""
+    script = (
+        "import django, os;"
+        "os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'project.settings');"
+        "django.setup();"
+        "from agendamento.models import Profissional;"
+        "print(Profissional.objects.count())"
+    )
+    resultado = subprocess.run(
+        [str(python), "-c", script],
+        cwd=str(RAIZ),
+        capture_output=True,
+        text=True,
+    )
+    if resultado.returncode != 0 or resultado.stdout.strip() != "0":
+        return
+    aviso("Carregando os dados de exemplo")
+    rodar([str(python), str(MANAGE), "criar_dados_exemplo", "--silencioso"])
+
+
 def porta_ocupada():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as teste:
         teste.settimeout(0.5)
@@ -147,6 +168,7 @@ def main():
     instalar_django(python)
     preparar_banco(python)
     criar_acesso_demo(python)
+    carregar_dados_exemplo(python)
 
     endereco = "http://{0}:{1}".format(HOST, PORTA)
     aviso("Subindo o servidor em " + endereco)
