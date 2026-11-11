@@ -29,6 +29,9 @@
         <a class="nav__link" href="{% url 'profissional_detail' user.pk %}">
           <svg class="icon" aria-hidden="true"><use href="#i-user"></use></svg> Meu perfil público
         </a>
+        <a class="nav__link" href="{% url 'painel_profissional' %}"{% if url_name == "painel_profissional" %} aria-current="page"{% endif %}>
+          <svg class="icon" aria-hidden="true"><use href="#i-calendar"></use></svg> Minha agenda
+        </a>
         <a class="nav__link" href="{% url 'disponibilidade_bloqueio' %}"{% if url_name == "disponibilidade_bloqueio" or url_name == "criar_bloqueio" %} aria-current="page"{% endif %}>
           <svg class="icon" aria-hidden="true"><use href="#i-clock"></use></svg> Disponibilidade e bloqueios
         </a>

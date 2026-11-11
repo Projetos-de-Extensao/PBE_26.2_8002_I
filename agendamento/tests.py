@@ -2002,6 +2002,78 @@ class HorariosLivresTests(TestCase):
         self.assertEqual(horarios_livres(self.prof, self.dia + timedelta(days=1), 30), [])
 
 
+class PainelProfissionalTests(TestCase):
+    """RF18: o profissional acompanha a agenda navegando por dia."""
+
+    def setUp(self):
+        self.profissional = Profissional.objects.create_user(
+            email="prof-painel@exemplo.com", password="Senha#Forte123",
+            nome="Carla Dias", especialidade="Pilates", papel="profissional",
+        )
+        self.cliente = Cliente.objects.create_user(
+            email="cliente-painel@exemplo.com", password="Senha#Forte123",
+            nome="Ana Souza", papel="cliente",
+        )
+        self.dia = timezone.localdate() + timedelta(days=1)
+        Disponibilidade.objects.create(
+            profissional=self.profissional, dia_semana=self.dia.weekday(),
+            hora_inicio=time(8), hora_fim=time(18),
+        )
+        self.servico = Servico.objects.create(
+            profissional=self.profissional, nome="Aula", tipo="Pilates",
+            duracao_minutos=60,
+        )
+        self.horario = _aware(self.dia, time(10))
+        self.agendamento = Agendamento.objects.create(
+            cliente=self.cliente, profissional=self.profissional,
+            servico=self.servico, data_hora_inicio=self.horario,
+            data_hora_fim=self.horario + timedelta(hours=1),
+        )
+        self.url = reverse("painel_profissional")
+
+    def test_mostra_os_atendimentos_do_dia(self):
+        self.client.force_login(self.profissional)
+
+        response = self.client.get(self.url, {"dia": self.dia.isoformat()})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.cliente.nome)
+        self.assertContains(response, self.servico.nome)
+
+    def test_outro_dia_aparece_vazio(self):
+        self.client.force_login(self.profissional)
+
+        response = self.client.get(
+            self.url, {"dia": (self.dia + timedelta(days=2)).isoformat()}
+        )
+
+        self.assertContains(response, "Dia sem atendimentos")
+
+    def test_nao_mostra_agenda_de_outro_profissional(self):
+        outro = Profissional.objects.create_user(
+            email="prof2-painel@exemplo.com", password="Senha#Forte123",
+            nome="Diego Alves", especialidade="Nutrição", papel="profissional",
+        )
+        self.client.force_login(outro)
+
+        response = self.client.get(self.url, {"dia": self.dia.isoformat()})
+
+        self.assertNotContains(response, self.cliente.nome)
+
+    def test_data_invalida_cai_no_dia_de_hoje(self):
+        self.client.force_login(self.profissional)
+
+        response = self.client.get(self.url, {"dia": "data-errada"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["dia"], timezone.localdate())
+
+    def test_cliente_nao_abre_o_painel(self):
+        self.client.force_login(self.cliente)
+
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+
+
 class RecepcaoAgendamentoTests(TestCase):
     """RF25 e RN14: a recepção agenda em nome do cliente, sem acesso administrativo."""
 

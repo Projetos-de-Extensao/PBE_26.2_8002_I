@@ -26,6 +26,7 @@ from django.urls import path, reverse_lazy
 
 from agendamento.agenda_profissional import (
     CriarBloqueioView,
+    PainelProfissionalView,
     DisponibilidadeBloqueioView,
     RemoverBloqueioView,
     RemoverDisponibilidadeView,
@@ -125,6 +126,11 @@ urlpatterns = [
         "agendar/<int:servico_id>/previa-recorrencia/",
         PreviaRecorrenciaView.as_view(),
         name="previa_recorrencia",
+    ),
+    path(
+        "profissional/agenda/",
+        PainelProfissionalView.as_view(),
+        name="painel_profissional",
     ),
     path(
         "profissional/disponibilidade/",
