@@ -74,6 +74,17 @@ Para criar contas com senhas aleatórias, use `python manage.py criar_usuarios_d
 python manage.py test agendamento
 ```
 
+## Configuração por ambiente
+
+O projeto roda sem configurar nada. Em produção, defina `DJANGO_SECRET_KEY`,
+`DJANGO_DEBUG=0` e `DJANGO_ALLOWED_HOSTS`: as proteções de HTTPS e de cookies
+ligam sozinhas. O arquivo `.env.example` lista todas as variáveis e a página
+[Ambiente e Implantação](docs/Construcao/ambiente_e_implantacao.md) explica
+cada uma.
+
+Em desenvolvimento, o e-mail de recuperação de senha aparece no terminal do
+servidor, não na caixa de entrada.
+
 ## Estrutura
 
 ```
