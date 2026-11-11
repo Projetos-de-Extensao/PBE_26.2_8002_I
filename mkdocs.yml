@@ -39,6 +39,7 @@ nav:
           - Administração: Elaboracao/prototipos_baixa_fidelidade_md/11-administracao.md
   - Construção:
       - Index: Construcao/index.md
+      - Rastreabilidade: Construcao/rastreabilidade.md
       - Github Workflows: Construcao/github_workflows.md
       - GitHub Projects: Construcao/github_projects.md
       - CodeSpace: Construcao/codespace.md
