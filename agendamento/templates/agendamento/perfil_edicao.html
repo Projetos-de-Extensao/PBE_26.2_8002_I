@@ -1,0 +1,39 @@
+{% extends "agendamento/base.html" %}
+{% block title %}Editar perfil | Equilibra{% endblock %}
+{% block topbar_context %}Minha conta{% endblock %}
+{% block content_class %}content--narrow{% endblock %}
+{% block content %}
+  <header class="page-header">
+    <div class="page-header__text">
+      <span class="eyebrow">Minha conta</span>
+      <h1 id="profile-title">Editar perfil</h1>
+      <p class="lead mb-0">Altere seus dados pessoais{% if eh_profissional %} e profissionais{% endif %}.</p>
+    </div>
+  </header>
+
+  <div class="card mb-5">
+    <div class="row">
+      <span class="avatar avatar--lg" aria-hidden="true">{{ user.nome|default:user.email|slice:":1" }}</span>
+      <div>
+        <p class="cell-strong mb-0">{{ user.nome }}</p>
+        <p class="muted text-sm mb-0">{{ user.email }} · {{ user.perfil.get_papel_display }}</p>
+      </div>
+    </div>
+  </div>
+
+  <form method="post" class="card form" aria-labelledby="profile-title">
+    {% csrf_token %}
+    {% include "agendamento/partials/_form_errors.html" %}
+    {% for field in form %}
+      {% include "agendamento/partials/_field.html" with field=field %}
+    {% endfor %}
+    <p class="field__help">
+      <svg class="icon icon--sm" aria-hidden="true"><use href="#i-lock"></use></svg>
+      E-mail e papel de acesso não podem ser alterados por aqui.
+    </p>
+    <div class="btn-row btn-row--end mt-0">
+      <a class="btn btn--ghost" href="{% url 'login' %}">Cancelar</a>
+      <button type="submit" class="btn">Salvar alterações</button>
+    </div>
+  </form>
+{% endblock %}

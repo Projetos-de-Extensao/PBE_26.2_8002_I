@@ -1,0 +1,94 @@
+{# Menu lateral. Os itens exibidos dependem do papel do usuário (RN08). #}
+{% with papel=user.perfil.papel url_name=request.resolver_match.url_name %}
+<aside class="sidebar" id="menu-lateral" aria-label="Menu lateral">
+  {% include "agendamento/partials/_brand.html" %}
+
+  <nav class="nav" aria-label="Navegação principal">
+    {% if user.is_authenticated %}
+      <p class="nav__title">Principal</p>
+      {% if papel == "administrador" %}
+        <a class="nav__link" href="{% url 'administracao' %}"{% if url_name == "administracao" %} aria-current="page"{% endif %}>
+          <svg class="icon" aria-hidden="true"><use href="#i-chart"></use></svg> Painel
+        </a>
+      {% else %}
+        <a class="nav__link" href="{% url 'inicio' %}"{% if url_name == "inicio" %} aria-current="page"{% endif %}>
+          <svg class="icon" aria-hidden="true"><use href="#i-home"></use></svg> Início
+        </a>
+      {% endif %}
+      <a class="nav__link" href="{% url 'profissionais' %}"{% if url_name == "profissionais" or url_name == "profissional_detail" or url_name == "novo_agendamento" %} aria-current="page"{% endif %}>
+        <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg> Profissionais
+      </a>
+      {% if papel == "cliente" %}
+        <a class="nav__link" href="{% url 'minha_agenda' %}"{% if url_name == "minha_agenda" %} aria-current="page"{% endif %}>
+          <svg class="icon" aria-hidden="true"><use href="#i-calendar"></use></svg> Minha agenda
+        </a>
+      {% endif %}
+
+      {% if papel == "profissional" %}
+        <p class="nav__title">Atendimento</p>
+        <a class="nav__link" href="{% url 'profissional_detail' user.pk %}">
+          <svg class="icon" aria-hidden="true"><use href="#i-user"></use></svg> Meu perfil público
+        </a>
+        <a class="nav__link" href="{% url 'painel_profissional' %}"{% if url_name == "painel_profissional" %} aria-current="page"{% endif %}>
+          <svg class="icon" aria-hidden="true"><use href="#i-calendar"></use></svg> Minha agenda
+        </a>
+        <a class="nav__link" href="{% url 'disponibilidade_bloqueio' %}"{% if url_name == "disponibilidade_bloqueio" or url_name == "criar_bloqueio" %} aria-current="page"{% endif %}>
+          <svg class="icon" aria-hidden="true"><use href="#i-clock"></use></svg> Disponibilidade e bloqueios
+        </a>
+      {% elif papel == "recepcionista" %}
+        <p class="nav__title">Recepção</p>
+        <a class="nav__link" href="{% url 'recepcao_agenda' %}"{% if url_name == "recepcao_agenda" %} aria-current="page"{% endif %}>
+          <svg class="icon" aria-hidden="true"><use href="#i-calendar"></use></svg> Agenda do dia
+        </a>
+        <a class="nav__link" href="{% url 'profissionais' %}"{% if url_name == "recepcao_agendar" %} aria-current="page"{% endif %}>
+          <svg class="icon" aria-hidden="true"><use href="#i-calendar-plus"></use></svg> Agendar para cliente
+        </a>
+      {% elif papel == "administrador" %}
+        <p class="nav__title">Gestão</p>
+        <a class="nav__link" href="{% url 'administracao' %}#profissionais-heading">
+          <svg class="icon" aria-hidden="true"><use href="#i-stethoscope"></use></svg> Profissionais
+        </a>
+        <a class="nav__link" href="{% url 'administracao' %}#servicos-heading">
+          <svg class="icon" aria-hidden="true"><use href="#i-briefcase"></use></svg> Serviços
+        </a>
+        <a class="nav__link" href="{% url 'administracao' %}#salas-heading">
+          <svg class="icon" aria-hidden="true"><use href="#i-door"></use></svg> Salas e equipamentos
+        </a>
+        <a class="nav__link" href="{% url 'administracao' %}#usuarios-heading">
+          <svg class="icon" aria-hidden="true"><use href="#i-shield"></use></svg> Usuários e papéis
+        </a>
+        <a class="nav__link" href="{% url 'admin:index' %}">
+          <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg> Administração avançada
+        </a>
+      {% endif %}
+
+      <p class="nav__title">Conta</p>
+      <a class="nav__link" href="{% url 'perfil' %}"{% if url_name == "perfil" %} aria-current="page"{% endif %}>
+        <svg class="icon" aria-hidden="true"><use href="#i-edit"></use></svg> Editar perfil
+      </a>
+    {% else %}
+      <p class="nav__title">Acesso</p>
+      <a class="nav__link" href="{% url 'login' %}"{% if url_name == "login" %} aria-current="page"{% endif %}>
+        <svg class="icon" aria-hidden="true"><use href="#i-login"></use></svg> Entrar
+      </a>
+      <a class="nav__link" href="{% url 'cadastro' %}">
+        <svg class="icon" aria-hidden="true"><use href="#i-user"></use></svg> Criar conta
+      </a>
+      <a class="nav__link" href="{% url 'profissionais' %}"{% if url_name == "profissionais" or url_name == "profissional_detail" %} aria-current="page"{% endif %}>
+        <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg> Profissionais
+      </a>
+    {% endif %}
+  </nav>
+
+  {% if user.is_authenticated %}
+    <div class="sidebar__footer">
+      <form method="post" action="{% url 'logout' %}">
+        {% csrf_token %}
+        <button type="submit" class="nav__button">
+          <svg class="icon" aria-hidden="true"><use href="#i-logout"></use></svg> Sair
+        </button>
+      </form>
+    </div>
+  {% endif %}
+</aside>
+{% endwith %}

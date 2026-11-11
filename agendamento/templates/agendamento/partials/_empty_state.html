@@ -1,0 +1,6 @@
+{# Estado vazio reutilizável. Parâmetros: icon, title, text. Ações opcionais via bloco do template pai. #}
+<div class="empty-state">
+  <span class="empty-state__icon"><svg class="icon icon--lg" aria-hidden="true"><use href="#i-{{ icon|default:'calendar' }}"></use></svg></span>
+  <h3>{{ title }}</h3>
+  {% if text %}<p>{{ text }}</p>{% endif %}
+</div>

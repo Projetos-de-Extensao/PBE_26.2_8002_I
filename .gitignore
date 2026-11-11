@@ -70,3 +70,6 @@ node_modules/
 .cache/mkdocs-jupyter/f03484b3235254cd644b48f11e8d6e67c0370610b5cbbd2714a8896b00f2d344.json
 .cache/mkdocs-jupyter/c4dd72c10d4fc791ce4c7340891edbb5b95cac7b271cc08a9467bf48a29e7e31.json
 db.sqlite3
+
+# Projeto antigo removido; banco local do Django
+src/

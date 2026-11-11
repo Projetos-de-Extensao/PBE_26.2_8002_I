@@ -1,0 +1,47 @@
+{% extends "agendamento/base.html" %}
+{% block title %}Início | Agendamento{% endblock %}
+{% block main_class %}wide{% endblock %}
+{% block content %}
+  <h1>Olá, {{ user.nome }}</h1>
+  <p class="muted">Acompanhe seus próximos atendimentos e encontre seu próximo profissional.</p>
+
+  <nav class="cards" aria-label="Atalhos">
+    <a class="card text-link" href="{% url 'profissionais' %}">
+      <h2>Buscar profissionais</h2>
+      <span>Encontre serviços e horários disponíveis.</span>
+    </a>
+    <a class="card text-link" href="{% url 'minha_agenda' %}">
+      <h2>Minha agenda</h2>
+      <span>Veja todos os seus agendamentos.</span>
+    </a>
+  </nav>
+
+  <section aria-labelledby="proximos-heading">
+    <h2 id="proximos-heading">Próximos atendimentos</h2>
+    {% if agendamentos %}
+      <div class="cards">
+        {% for agendamento in agendamentos %}
+          <article class="card">
+            <h3>{{ agendamento.servico.nome }}</h3>
+            <p><strong>Data:</strong> {{ agendamento.data_hora_inicio|date:"d/m/Y" }}</p>
+            <p><strong>Horário:</strong> {{ agendamento.data_hora_inicio|date:"H:i" }}</p>
+            <p><strong>Profissional:</strong> {{ agendamento.profissional.nome }}</p>
+            <p><strong>Status:</strong> {{ agendamento.get_status_display }}</p>
+          </article>
+        {% endfor %}
+      </div>
+      <a class="text-link" href="{% url 'minha_agenda' %}">Acessar agenda completa</a>
+    {% else %}
+      <p class="muted">Você não tem atendimentos futuros agendados.</p>
+      <p><a class="text-link" href="{% url 'profissionais' %}">Busque profissionais para encontrar um serviço e agendar.</a></p>
+    {% endif %}
+  </section>
+
+  <nav class="options" aria-label="Conta">
+    <span class="muted">Conectado como {{ user.email }}</span>
+    <form method="post" action="{% url 'logout' %}">
+      {% csrf_token %}
+      <button type="submit">Sair</button>
+    </form>
+  </nav>
+{% endblock %}

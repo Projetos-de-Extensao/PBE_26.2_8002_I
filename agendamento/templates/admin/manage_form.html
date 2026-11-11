@@ -1,0 +1,26 @@
+{% extends "agendamento/base.html" %}
+{% block title %}{{ titulo }} | Administração{% endblock %}
+{% block topbar_context %}<a class="link" href="{% url 'administracao' %}"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-chevron-left"></use></svg> Painel administrativo</a>{% endblock %}
+{% block content_class %}content--narrow{% endblock %}
+{% block content %}
+  <header class="page-header">
+    <div class="page-header__text">
+      <ol class="breadcrumb" aria-label="Você está em">
+        <li><a class="link" href="{% url 'administracao' %}">Administração</a></li>
+        <li>{{ titulo }}</li>
+      </ol>
+      <h1>{{ titulo }}</h1>
+    </div>
+  </header>
+  <form method="post" class="card form">
+    {% csrf_token %}
+    {% include "agendamento/partials/_form_errors.html" %}
+    {% for field in form %}
+      {% include "agendamento/partials/_field.html" with field=field %}
+    {% endfor %}
+    <div class="btn-row btn-row--end mt-0">
+      <a class="btn btn--ghost" href="{% url 'administracao' %}">Cancelar e voltar</a>
+      <button type="submit" class="btn">Salvar</button>
+    </div>
+  </form>
+{% endblock %}

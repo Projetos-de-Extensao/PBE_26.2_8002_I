@@ -109,13 +109,14 @@ Um cliente pode possuir vários agendamentos. Um profissional pode possuir vári
 
 ## Implementação
 
-As duas classes foram implementadas no app `agenda` do projeto Django (`src/agenda/models.py`) como Django Models, e registradas no Django Admin.
+As duas classes foram implementadas no app `agendamento` do projeto Django (`agendamento/models.py`) como Django Models, e registradas no Django Admin.
 
-- `Profissional` possui `OneToOneField` com o usuário do sistema (`settings.AUTH_USER_MODEL`, `related_name="perfil_profissional"`).
-- `Agendamento` possui `ForeignKey` para o cliente (`related_name="agendamentos_cliente"`) e para `Profissional` (`related_name="agendamentos"`). O serviço é, por ora, um campo de texto, pois ainda não existe a classe `Servico`.
-- As validações são feitas no back-end, em `Agendamento.clean()`, chamado também em `save()`.
-- As migrations do Django (`0002_profissional_agendamento`) transformam essas classes em tabelas no banco de dados.
-- Os testes automatizados estão em `src/agenda/tests.py`.
+- `Profissional` é uma especialização de `Usuario`, com especialidade, modalidade de atendimento, formação e apresentação.
+- `Agendamento` possui `ForeignKey` para o cliente, para o profissional, para o serviço e para a sala, além de relação com os equipamentos utilizados.
+- O serviço deixou de ser um campo de texto e virou a classe `Servico`, com duração em minutos, que define o horário de término do atendimento.
+- As validações são feitas no back-end, em `Agendamento.clean()`, chamado também em `save()`, cobrindo conflito de profissional, de cliente, de sala e de equipamento exclusivo, além da disponibilidade e dos bloqueios do profissional.
+- As migrations do Django transformam essas classes em tabelas no banco de dados.
+- Os testes automatizados estão em `agendamento/tests.py`.
 
 ## Conclusão
 

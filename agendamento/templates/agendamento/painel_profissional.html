@@ -1,0 +1,72 @@
+{% extends "agendamento/base.html" %}
+{% block title %}Minha agenda | Equilibra{% endblock %}
+{% block topbar_context %}Agenda do dia{% endblock %}
+{% block content %}
+  <header class="page-header">
+    <div class="page-header__text">
+      <span class="eyebrow">Profissional</span>
+      <h1>Minha agenda</h1>
+      <p class="lead mb-0">Atendimentos de {{ dia|date:"d/m/Y" }}{% if dia == hoje %} (hoje){% endif %}.</p>
+    </div>
+    <div class="page-header__actions">
+      <a class="btn btn--secondary" href="?dia={{ dia_anterior|date:'Y-m-d' }}">
+        <svg class="icon" aria-hidden="true"><use href="#i-chevron-left"></use></svg> Dia anterior
+      </a>
+      <a class="btn btn--secondary" href="?dia={{ dia_seguinte|date:'Y-m-d' }}">
+        Próximo dia <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+      </a>
+    </div>
+  </header>
+
+  {% if agendamentos %}
+    <ul class="appt-list">
+      {% for agendamento in agendamentos %}
+        <li class="appt">
+          <div class="time-tile">
+            {{ agendamento.data_hora_inicio|date:"H:i" }}
+            <small>até {{ agendamento.data_hora_fim|date:"H:i" }}</small>
+          </div>
+          <div>
+            <h3 class="appt__title">{{ agendamento.servico.nome }}</h3>
+            <p class="appt__meta">
+              <span><svg class="icon icon--sm" aria-hidden="true"><use href="#i-user"></use></svg>Cliente: {{ agendamento.cliente.nome }}</span>
+              {% if agendamento.sala %}<span><svg class="icon icon--sm" aria-hidden="true"><use href="#i-map-pin"></use></svg>Sala: {{ agendamento.sala.nome }}</span>{% endif %}
+              {% if agendamento.recepcionista %}<span><svg class="icon icon--sm" aria-hidden="true"><use href="#i-headset"></use></svg>Agendado pela recepção</span>{% endif %}
+            </p>
+          </div>
+          <div class="appt__aside">
+            {% include "agendamento/partials/_status_badge.html" with agendamento=agendamento %}
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <div class="empty-state">
+      <span class="empty-state__icon"><svg class="icon icon--lg" aria-hidden="true"><use href="#i-calendar-off"></use></svg></span>
+      <h3>Dia sem atendimentos</h3>
+      <p>Nenhum atendimento marcado para esta data.</p>
+    </div>
+  {% endif %}
+
+  {% if bloqueios %}
+    <section class="section" aria-labelledby="bloqueios-heading">
+      <div class="section__header">
+        <h2 id="bloqueios-heading">Bloqueios deste dia</h2>
+      </div>
+      <ul class="week-list">
+        {% for bloqueio in bloqueios %}
+          <li>
+            <strong>{{ bloqueio.inicio|time:"H:i" }}–{{ bloqueio.fim|time:"H:i" }}</strong>
+            <span>{{ bloqueio.motivo }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endif %}
+
+  <div class="btn-row mt-5">
+    <a class="btn btn--secondary" href="{% url 'disponibilidade_bloqueio' %}">
+      <svg class="icon" aria-hidden="true"><use href="#i-clock"></use></svg> Disponibilidade e bloqueios
+    </a>
+  </div>
+{% endblock %}

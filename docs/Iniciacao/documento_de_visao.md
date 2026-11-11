@@ -2,86 +2,135 @@
 id: documento_de_visao
 title: Documento de Visão
 ---
+
 ## Introdução
 
 <p align = "justify">
-O propósito deste documento é fornecer uma visão geral sobre o projeto que será realizado na disciplina Arquitetura e Desenho de Software 2020/1, na Universidade de Brasília. Sendo assim, Nesse documento serão descritas de maneira resumida as principais funcionalidades, usabilidades, o problema que será abordado e os objetivos da equipe.
+Este documento apresenta a visão geral do Equilibra, plataforma web de
+agendamento multidisciplinar desenvolvida na disciplina Projeto Back-End
+(IBM8936), turma PBE 26.2 — 8002 I. Ele descreve o problema atacado, os
+usuários atendidos, as funcionalidades principais e os limites do produto.
 </p>
 
-## Descrição do Problema 
-
-<p align = "justify">
-Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged.
-</p>
+## Descrição do Problema
 
 ### Problema
 
-Dificuldade em gerenciar e organizar...
+<p align = "justify">
+Em academias, clínicas e estúdios, cada profissional costuma manter a própria
+agenda em ferramentas separadas: mensagens de WhatsApp, planilhas e cadernos.
+Quando um mesmo cliente é acompanhado por mais de um profissional — personal
+trainer, nutricionista e fisioterapeuta, por exemplo — ninguém enxerga a rotina
+completa dele, e as salas e os equipamentos compartilhados não têm controle
+nenhum.
+</p>
 
 ### Impactados
 
-Usuários....
+Clientes, profissionais de treinamento, saúde e bem-estar, recepcionistas e
+administradores do estabelecimento.
 
 ### Consequência
 
-A criação de novos....
+<p align = "justify">
+O resultado é choque de horário, retrabalho para remarcar, sala ou equipamento
+reservado em duplicidade e dependência de troca de mensagens para qualquer
+alteração. O cliente não tem uma visão única dos seus atendimentos e o
+estabelecimento não sabe qual é a ocupação real dos seus espaços.
+</p>
 
 ### Solução
 
-Utilizar a aplicação que será desenvolvida visando resolver...
+<p align = "justify">
+Uma plataforma web única em que o cliente pesquisa profissionais, consulta
+horários livres e agenda, reagenda ou cancela atendimentos; o profissional
+configura sua disponibilidade e bloqueios; a recepção opera a agenda em nome do
+cliente; e o administrador mantém profissionais, serviços, salas, equipamentos
+e permissões. Antes de confirmar qualquer atendimento, o sistema verifica se
+cliente, profissional e, quando necessário, sala e equipamento estão livres no
+mesmo intervalo.
+</p>
 
 ## Objetivos
 
 <p align = "justify">
-O objetivo da equipe de desenvolvimento é fornecer...
+Centralizar em uma única agenda os atendimentos de diferentes especialidades,
+eliminar conflitos de horário e de recursos antes que aconteçam, e reduzir o
+trabalho manual de coordenação entre cliente, profissionais e recepção.
 </p>
 
-## Descrição do Usuário 
+## Descrição do Usuário
 
-<p align = "justify">
-Os usuários serão....
-</p>
+| Perfil | Quem é | O que faz na plataforma |
+|---|---|---|
+| Cliente | Pessoa atendida pelo estabelecimento | Pesquisa profissionais, agenda, reagenda, cancela e acompanha a própria agenda |
+| Profissional | Personal trainer, nutricionista, fisioterapeuta e afins | Configura disponibilidade, bloqueia horários e acompanha os atendimentos do dia |
+| Recepcionista | Quem atende no balcão | Cria atendimentos em nome do cliente e acompanha a agenda do dia |
+| Administrador | Responsável pelo estabelecimento | Gerencia profissionais, serviços, salas, equipamentos, usuários e papéis |
 
 ## Recursos do produto
 
-### Conta
+### Conta e acesso
 
 <p align = "justify">
-O cliente poderá realizar seu cadastro....
+O usuário cria a conta informando nome, e-mail e senha, escolhe o perfil de
+cliente, profissional ou recepcionista e pode recuperar a senha por e-mail. O
+papel de administrador não é concedido pelo cadastro.
 </p>
 
-### Loja
+### Profissionais e serviços
 
 <p align = "justify">
-O cliente poderá cadastrar uma loja única....
+Cada profissional tem especialidade, modalidade de atendimento e apresentação,
+além dos serviços que oferece, cada um com a duração que define o horário de
+término do atendimento.
 </p>
 
-### Produto
+### Agendamento
 
 <p align = "justify">
-O cliente poderá cadastrar....
+O cliente escolhe o serviço e um dos horários livres, podendo indicar sala e
+equipamentos. É possível repetir o atendimento semanalmente, e cada data da
+série é conferida separadamente. Quando o horário não pode ser reservado, a
+tela explica o motivo e sugere outros horários.
 </p>
 
-### Pesquisa sobre Lojas
+### Agenda
 
 <p align = "justify">
-O cliente poderá pesquisar...
+Cliente, profissional e recepção têm visões próprias da agenda, com data,
+horário, serviço, pessoas envolvidas, local e status do atendimento.
+</p>
+
+### Espaços e recursos
+
+<p align = "justify">
+Salas e equipamentos são cadastrados pelo administrador. Equipamentos marcados
+como exclusivos não podem ser reservados por dois atendimentos no mesmo
+intervalo.
 </p>
 
 ## Restrições
 
 <p align = "justify">
-A aplicação não será responsável...
+A aplicação não substitui prontuário clínico, não realiza telemedicina, não
+emite diagnóstico nem prescrição, não processa convênios ou pagamentos e não
+possui aplicativo nativo. Lembretes automáticos e lista de espera foram
+classificados como evolução e não fazem parte desta entrega.
 </p>
 
 ## Referências Bibliográficas
 
-> Documento de visão. Disponível em https://www... Acesso em dd/MM/yyYY
+> [Pesquisa do tema](./pesquisa.md)
 
-> Documento de visão. Disponível em  Acesso em dd/MM/yyYY
+> [Brainstorm](./Brainstorm.md)
+
+> [Regras de Negócio](../Elaboracao/regras-de-negocio.md)
+
+> BARBOSA, S. D. J.; DA SILVA, B. S. Interação Humano-Computador. Rio de Janeiro: Elsevier, 2010.
 
 ## Versionamento
+
 | Data | Versão | Descrição | Autor(es) |
 | -- | -- | -- | -- |
-| DD/MM/YYYY | 1.0 | Criação do documento | XXX XXXX e ZZZ ZZZZ | 
-
+| 11/11/2026 | 1.0 | Documento de visão escrito a partir da pesquisa, do brainstorm e do produto implementado | Equipe do projeto |

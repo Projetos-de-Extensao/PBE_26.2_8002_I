@@ -8,6 +8,7 @@ nav:
   - Home: index.md
   - Iniciação: 
       - Index: Iniciacao/index.md
+      - Documento de Visão: Iniciacao/documento_de_visao.md
       - Pesquisa: Iniciacao/pesquisa.md
       - 5w2h: Iniciacao/5w2h.md
       - Design Thinking: Iniciacao/design_thinking.md
@@ -23,6 +24,7 @@ nav:
       - Diagrama de Classes: Elaboracao/diagrama_de_classes.md
       - Diagrama de Sequência: Elaboracao/diagrama_de_sequencia.md
       - Regras de Negócio: Elaboracao/regras-de-negocio.md
+      - Papéis e Permissões: Elaboracao/papeis-e-permissoes.md
       - Protótipos de Baixa Fidelidade:
           - Index: Elaboracao/prototipos_baixa_fidelidade_md/index.md
           - Login: Elaboracao/prototipos_baixa_fidelidade_md/01-login.md
@@ -38,6 +40,8 @@ nav:
           - Administração: Elaboracao/prototipos_baixa_fidelidade_md/11-administracao.md
   - Construção:
       - Index: Construcao/index.md
+      - Rastreabilidade: Construcao/rastreabilidade.md
+      - Ambiente e Implantação: Construcao/ambiente_e_implantacao.md
       - Github Workflows: Construcao/github_workflows.md
       - GitHub Projects: Construcao/github_projects.md
       - CodeSpace: Construcao/codespace.md

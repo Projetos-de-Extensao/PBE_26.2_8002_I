@@ -1,0 +1,204 @@
+{% extends "agendamento/base.html" %}
+{% block title %}Início | Equilibra{% endblock %}
+{% block topbar_context %}Início{% endblock %}
+{% block content %}
+  <section class="hero" aria-labelledby="boas-vindas">
+    <div>
+      <span class="role-pill"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-user"></use></svg> {{ papel }}</span>
+      <h1 id="boas-vindas">Olá, {{ user.nome }}!</h1>
+      <p>Você entrou como <strong>{{ papel }}</strong>.</p>
+    </div>
+    <div class="page-header__actions">
+      {% if eh_cliente %}
+        <a class="btn btn--accent btn--lg" href="{% url 'profissionais' %}">
+          <svg class="icon" aria-hidden="true"><use href="#i-calendar-plus"></use></svg> Buscar profissionais e agendar
+        </a>
+      {% elif eh_profissional %}
+        <a class="btn btn--secondary" href="{% url 'profissional_detail' user.pk %}">
+          <svg class="icon" aria-hidden="true"><use href="#i-user"></use></svg> Ver perfil público
+        </a>
+      {% endif %}
+    </div>
+  </section>
+
+  {% if eh_cliente %}
+    <div class="grid grid--3 section">
+      <a class="card card--interactive shortcut" href="{% url 'profissionais' %}">
+        <span class="shortcut__icon"><svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg></span>
+        <span><span class="shortcut__title">Buscar profissionais</span><span class="shortcut__text">Filtre por especialidade, serviço e modalidade.</span></span>
+      </a>
+      <a class="card card--interactive shortcut" href="{% url 'minha_agenda' %}">
+        <span class="shortcut__icon"><svg class="icon" aria-hidden="true"><use href="#i-calendar"></use></svg></span>
+        <span><span class="shortcut__title">Minha agenda</span><span class="shortcut__text">Veja e gerencie todos os seus agendamentos.</span></span>
+      </a>
+      <a class="card card--interactive shortcut" href="{% url 'perfil' %}">
+        <span class="shortcut__icon"><svg class="icon" aria-hidden="true"><use href="#i-edit"></use></svg></span>
+        <span><span class="shortcut__title">Meus dados</span><span class="shortcut__text">Atualize nome e telefone de contato.</span></span>
+      </a>
+    </div>
+
+    <section class="section" aria-labelledby="cliente-heading">
+      <div class="section__header">
+        <h2 id="cliente-heading">Seus próximos atendimentos</h2>
+        <a class="link" href="{% url 'minha_agenda' %}">Ver minha agenda <svg class="icon icon--sm" aria-hidden="true"><use href="#i-arrow-right"></use></svg></a>
+      </div>
+      {% if agendamentos %}
+        <ul class="appt-list">
+          {% for agendamento in agendamentos %}
+            <li class="appt">
+              <div class="date-tile" aria-hidden="true">
+                <span class="date-tile__day">{{ agendamento.data_hora_inicio|date:"d" }}</span>
+                <span class="date-tile__month">{{ agendamento.data_hora_inicio|date:"M" }}</span>
+              </div>
+              <div>
+                <h3 class="appt__title">{{ agendamento.servico.nome }}</h3>
+                <p class="appt__meta">
+                  <span><svg class="icon icon--sm" aria-hidden="true"><use href="#i-clock"></use></svg>{{ agendamento.data_hora_inicio|date:"d/m/Y" }} às {{ agendamento.data_hora_inicio|date:"H:i" }}</span>
+                  <span><svg class="icon icon--sm" aria-hidden="true"><use href="#i-user"></use></svg>Profissional: {{ agendamento.profissional.nome }}</span>
+                  {% if agendamento.sala %}<span><svg class="icon icon--sm" aria-hidden="true"><use href="#i-map-pin"></use></svg>{{ agendamento.sala.nome }}</span>{% endif %}
+                </p>
+              </div>
+              <div class="appt__aside">
+                {% include "agendamento/partials/_status_badge.html" with agendamento=agendamento %}
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <div class="empty-state">
+          <span class="empty-state__icon"><svg class="icon icon--lg" aria-hidden="true"><use href="#i-calendar"></use></svg></span>
+          <h3>Nenhum atendimento marcado</h3>
+          <p>Você ainda não tem próximos atendimentos.</p>
+          <div class="btn-row">
+            <a class="btn" href="{% url 'profissionais' %}">Encontrar um profissional</a>
+          </div>
+        </div>
+      {% endif %}
+    </section>
+
+  {% elif eh_profissional %}
+    <section class="section" aria-labelledby="profissional-heading">
+      <div class="section__header">
+        <h2 id="profissional-heading">Sua agenda</h2>
+        <span class="muted text-sm">Próximos atendimentos confirmados ou agendados</span>
+      </div>
+      {% if agendamentos %}
+        <ul class="appt-list">
+          {% for agendamento in agendamentos %}
+            <li class="appt">
+              <div class="date-tile" aria-hidden="true">
+                <span class="date-tile__day">{{ agendamento.data_hora_inicio|date:"d" }}</span>
+                <span class="date-tile__month">{{ agendamento.data_hora_inicio|date:"M" }}</span>
+              </div>
+              <div>
+                <h3 class="appt__title">{{ agendamento.servico.nome }}</h3>
+                <p class="appt__meta">
+                  <span><svg class="icon icon--sm" aria-hidden="true"><use href="#i-clock"></use></svg>{{ agendamento.data_hora_inicio|date:"d/m/Y" }} às {{ agendamento.data_hora_inicio|date:"H:i" }}</span>
+                  <span><svg class="icon icon--sm" aria-hidden="true"><use href="#i-user"></use></svg>Cliente: {{ agendamento.cliente.nome }}</span>
+                  {% if agendamento.sala %}<span><svg class="icon icon--sm" aria-hidden="true"><use href="#i-map-pin"></use></svg>{{ agendamento.sala.nome }}</span>{% endif %}
+                </p>
+              </div>
+              <div class="appt__aside">
+                {% include "agendamento/partials/_status_badge.html" with agendamento=agendamento %}
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <div class="empty-state">
+          <span class="empty-state__icon"><svg class="icon icon--lg" aria-hidden="true"><use href="#i-calendar"></use></svg></span>
+          <h3>Agenda livre</h3>
+          <p>Você não tem próximos atendimentos agendados.</p>
+        </div>
+      {% endif %}
+    </section>
+
+    <section class="section" aria-labelledby="gestao-agenda-heading">
+      <div class="section__header">
+        <h2 id="gestao-agenda-heading">Gestão da agenda</h2>
+      </div>
+      <div class="grid grid--2">
+        <a class="card card--interactive shortcut" href="{% url 'disponibilidade_bloqueio' %}">
+          <span class="shortcut__icon"><svg class="icon" aria-hidden="true"><use href="#i-clock"></use></svg></span>
+          <span>
+            <span class="shortcut__title">Disponibilidade semanal</span>
+            <span class="shortcut__text">Defina os dias e as faixas de horário em que você atende.</span>
+          </span>
+          <svg class="icon shortcut__arrow" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+        </a>
+        <a class="card card--interactive shortcut" href="{% url 'disponibilidade_bloqueio' %}#titulo-bloqueio">
+          <span class="shortcut__icon"><svg class="icon" aria-hidden="true"><use href="#i-calendar-off"></use></svg></span>
+          <span>
+            <span class="shortcut__title">Bloqueio de horários</span>
+            <span class="shortcut__text">Retire períodos da agenda informando o motivo. Atendimentos afetados são listados antes.</span>
+          </span>
+          <svg class="icon shortcut__arrow" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+        </a>
+      </div>
+    </section>
+
+  {% elif eh_recepcionista %}
+    <section class="section" aria-labelledby="recepcao-heading">
+      <div class="section__header">
+        <h2 id="recepcao-heading">Agenda de hoje{% if hoje %} — {{ hoje|date:"d/m/Y" }}{% endif %}</h2>
+        <span class="badge badge--brand badge--plain">{{ agendamentos|length }} atendimento{{ agendamentos|length|pluralize }}</span>
+      </div>
+      {% if agendamentos %}
+        <ul class="appt-list">
+          {% for agendamento in agendamentos %}
+            <li class="appt">
+              <div class="time-tile">
+                {{ agendamento.data_hora_inicio|date:"H:i" }}
+                <small>até {{ agendamento.data_hora_fim|date:"H:i" }}</small>
+              </div>
+              <div>
+                <h3 class="appt__title">{{ agendamento.servico.nome }}</h3>
+                <p class="appt__meta">
+                  <span><svg class="icon icon--sm" aria-hidden="true"><use href="#i-user"></use></svg>Cliente: {{ agendamento.cliente.nome }}</span>
+                  <span><svg class="icon icon--sm" aria-hidden="true"><use href="#i-stethoscope"></use></svg>Profissional: {{ agendamento.profissional.nome }}</span>
+                  {% if agendamento.sala %}<span><svg class="icon icon--sm" aria-hidden="true"><use href="#i-map-pin"></use></svg>Sala: {{ agendamento.sala.nome }}</span>{% endif %}
+                </p>
+              </div>
+              <div class="appt__aside">
+                {% include "agendamento/partials/_status_badge.html" with agendamento=agendamento %}
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <div class="empty-state">
+          <span class="empty-state__icon"><svg class="icon icon--lg" aria-hidden="true"><use href="#i-calendar"></use></svg></span>
+          <h3>Dia sem atendimentos</h3>
+          <p>Não há atendimentos agendados para hoje.</p>
+        </div>
+      {% endif %}
+    </section>
+
+    <section class="section" aria-labelledby="operacao-heading">
+      <div class="section__header">
+        <h2 id="operacao-heading">Operação da recepção</h2>
+      </div>
+      <article class="card">
+        <div class="shortcut">
+          <span class="shortcut__icon"><svg class="icon" aria-hidden="true"><use href="#i-headset"></use></svg></span>
+          <span>
+            <span class="shortcut__title">Atender cliente no balcão</span>
+            <span class="shortcut__text">Consulte os horários livres e crie o atendimento em nome do cliente, com as mesmas validações de conflito do agendamento feito por ele.</span>
+          </span>
+        </div>
+        <div class="card__footer">
+          <a class="btn btn--sm" href="{% url 'profissionais' %}">
+            <svg class="icon icon--sm" aria-hidden="true"><use href="#i-calendar-plus"></use></svg> Novo atendimento
+          </a>
+          <a class="btn btn--secondary btn--sm" href="{% url 'recepcao_agenda' %}">
+            <svg class="icon icon--sm" aria-hidden="true"><use href="#i-calendar"></use></svg> Agenda do dia
+          </a>
+        </div>
+      </article>
+      <div class="alert alert--info mt-4">
+        <svg class="icon" aria-hidden="true"><use href="#i-info"></use></svg>
+        <div class="alert__body">Seu perfil de recepção não tem acesso à gestão administrativa.</div>
+      </div>
+    </section>
+  {% endif %}
+{% endblock %}
