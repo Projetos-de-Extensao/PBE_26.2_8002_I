@@ -177,19 +177,22 @@
     <section class="section" aria-labelledby="operacao-heading">
       <div class="section__header">
         <h2 id="operacao-heading">Operação da recepção</h2>
-        <span class="soon-tag">Em breve</span>
       </div>
-      <article class="card future">
+      <article class="card">
         <div class="shortcut">
           <span class="shortcut__icon"><svg class="icon" aria-hidden="true"><use href="#i-headset"></use></svg></span>
           <span>
             <span class="shortcut__title">Atender cliente no balcão</span>
-            <span class="shortcut__text">Cadastrar cliente, consultar horários livres e criar, reagendar ou cancelar atendimentos em nome dele, com as mesmas validações de conflito.</span>
+            <span class="shortcut__text">Consulte os horários livres e crie o atendimento em nome do cliente, com as mesmas validações de conflito do agendamento feito por ele.</span>
           </span>
         </div>
         <div class="card__footer">
-          <span class="btn btn--secondary btn--sm" aria-disabled="true">Novo atendimento</span>
-          <span class="muted text-xs">Depende de implementação no backend</span>
+          <a class="btn btn--sm" href="{% url 'profissionais' %}">
+            <svg class="icon icon--sm" aria-hidden="true"><use href="#i-calendar-plus"></use></svg> Novo atendimento
+          </a>
+          <a class="btn btn--secondary btn--sm" href="{% url 'recepcao_agenda' %}">
+            <svg class="icon icon--sm" aria-hidden="true"><use href="#i-calendar"></use></svg> Agenda do dia
+          </a>
         </div>
       </article>
       <div class="alert alert--info mt-4">
