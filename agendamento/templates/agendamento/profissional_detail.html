@@ -58,7 +58,11 @@
                 {% else %}
                   <p class="muted text-sm mb-0">Sem horários livres nos próximos 30 dias.</p>
                 {% endif %}
-                <a class="btn btn--block" href="{% url 'novo_agendamento' servico.id %}">Agendar este serviço</a>
+                {% if pode_agendar or not request.user.is_authenticated %}
+                  <a class="btn btn--block" href="{% url 'novo_agendamento' servico.id %}">Agendar este serviço</a>
+                {% else %}
+                  <p class="muted text-sm mb-0">Somente contas de cliente podem agendar atendimentos.</p>
+                {% endif %}
               </article>
             {% endfor %}
           </div>

@@ -1221,6 +1221,35 @@ class NovoAgendamentoViewTests(TestCase):
             f"{reverse('login')}?next={reverse('novo_agendamento', args=[self.servico.pk])}",
         )
 
+    def test_perfil_publico_mostra_botao_de_agendar_para_cliente(self):
+        self.client.force_login(self.cliente)
+
+        response = self.client.get(
+            reverse("profissional_detail", args=[self.profissional.pk])
+        )
+
+        self.assertContains(response, "Agendar este serviço")
+
+    def test_perfil_publico_esconde_botao_de_agendar_do_profissional(self):
+        self.client.force_login(self.profissional)
+
+        response = self.client.get(
+            reverse("profissional_detail", args=[self.profissional.pk])
+        )
+
+        self.assertNotContains(response, "Agendar este serviço")
+        self.assertContains(
+            response, "Somente contas de cliente podem agendar atendimentos."
+        )
+
+    def test_perfil_publico_mantem_o_botao_para_visitante(self):
+        """Quem não entrou ainda continua vendo o botão: o login pede a conta."""
+        response = self.client.get(
+            reverse("profissional_detail", args=[self.profissional.pk])
+        )
+
+        self.assertContains(response, "Agendar este serviço")
+
     def test_profissional_nao_abre_a_tela_de_agendar(self):
         self.client.force_login(self.profissional)
 

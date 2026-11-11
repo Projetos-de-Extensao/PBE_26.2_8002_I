@@ -388,6 +388,13 @@ class ProfissionalDetailView(DetailView):
                 servico,
             )
         context["servicos"] = servicos
+        context["pode_agendar"] = (
+            self.request.user.is_authenticated
+            and Perfil.objects.filter(
+                usuario_id=self.request.user.pk,
+                papel=Perfil.Papel.CLIENTE,
+            ).exists()
+        )
         return context
 
 
