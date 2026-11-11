@@ -474,7 +474,20 @@ class AgendamentoForm(forms.Form):
         )
 
 
-class NovoAgendamentoView(LoginRequiredMixin, FormView):
+class ClienteRoleRequiredMixin(LoginRequiredMixin):
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return self.handle_no_permission()
+        if not Perfil.objects.filter(
+            usuario_id=request.user.pk,
+            papel=Perfil.Papel.CLIENTE,
+        ).exists():
+            return _acesso_negado(request)
+        self.cliente = _cliente_para_usuario(request.user)
+        return super().dispatch(request, *args, **kwargs)
+
+
+class NovoAgendamentoView(ClienteRoleRequiredMixin, FormView):
     """Agendamento de um serviço (UC5, RF10).
 
     Quando o horário não pode ser reservado, a tela informa o motivo e sugere
@@ -550,12 +563,7 @@ class NovoAgendamentoView(LoginRequiredMixin, FormView):
         inicio = datetime.fromisoformat(form.cleaned_data["horario"])
         sala = form.cleaned_data.get("sala")
         recursos = list(form.cleaned_data.get("recursos") or [])
-        if not Perfil.objects.filter(
-            usuario_id=self.request.user.pk,
-            papel=Perfil.Papel.CLIENTE,
-        ).exists():
-            return _acesso_negado(self.request)
-        cliente = _cliente_para_usuario(self.request.user)
+        cliente = self.cliente
         if form.cleaned_data.get("repetir_semanal"):
             return self._criar_recorrencia(form, cliente, recursos)
 
@@ -709,19 +717,6 @@ class PreviaRecorrenciaView(NovoAgendamentoView):
                 "sessoes": sessoes,
             }
         )
-
-
-class ClienteRoleRequiredMixin(LoginRequiredMixin):
-    def dispatch(self, request, *args, **kwargs):
-        if not request.user.is_authenticated:
-            return self.handle_no_permission()
-        if not Perfil.objects.filter(
-            usuario_id=request.user.pk,
-            papel=Perfil.Papel.CLIENTE,
-        ).exists():
-            return _acesso_negado(request)
-        self.cliente = _cliente_para_usuario(request.user)
-        return super().dispatch(request, *args, **kwargs)
 
 
 class AgendaClienteView(ClienteRoleRequiredMixin, ListView):

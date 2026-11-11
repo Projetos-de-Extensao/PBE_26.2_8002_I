@@ -1221,6 +1221,41 @@ class NovoAgendamentoViewTests(TestCase):
             f"{reverse('login')}?next={reverse('novo_agendamento', args=[self.servico.pk])}",
         )
 
+    def test_profissional_nao_abre_a_tela_de_agendar(self):
+        self.client.force_login(self.profissional)
+
+        response = self.client.get(
+            reverse("novo_agendamento", args=[self.servico.pk])
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_recepcionista_nao_abre_a_tela_de_agendar(self):
+        recepcionista = Recepcionista.objects.create_user(
+            email="recepcao-agendar@exemplo.com",
+            password="Senha#Forte123",
+            nome="Recepção Teste",
+            papel=Papel.objects.create(nome="Recepcionista"),
+        )
+        self.client.force_login(recepcionista)
+
+        response = self.client.get(
+            reverse("novo_agendamento", args=[self.servico.pk])
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_profissional_nao_cria_agendamento_por_post_direto(self):
+        self.client.force_login(self.profissional)
+
+        response = self.client.post(
+            reverse("novo_agendamento", args=[self.servico.pk]),
+            {"horario": self.horario_inicio.isoformat()},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(Agendamento.objects.count(), 0)
+
     def test_confirma_agendamento_no_horario_escolhido(self):
         self.client.force_login(self.cliente)
         self.assertEqual(
