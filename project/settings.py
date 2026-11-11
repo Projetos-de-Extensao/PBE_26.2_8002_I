@@ -51,11 +51,27 @@ ALLOWED_HOSTS = variavel_lista(
     "DJANGO_ALLOWED_HOSTS",
     "localhost,127.0.0.1,[::1]",
 )
-CSRF_TRUSTED_ORIGINS = [
-    "https://localhost:8000",
-    "http://localhost:8000",
-]
+CSRF_TRUSTED_ORIGINS = variavel_lista(
+    "DJANGO_CSRF_TRUSTED_ORIGINS",
+    "http://localhost:8000,https://localhost:8000",
+)
 CSRF_COOKIE_NAME = "agendamento_csrftoken"
+
+# Fora de desenvolvimento, cookies e redirecionamento só por HTTPS, e cabeçalhos
+# de proteção ligados. Em DEBUG tudo fica desligado para o projeto rodar em
+# http://127.0.0.1 sem certificado.
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SAMESITE = "Lax"
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "same-origin"
+SECURE_SSL_REDIRECT = not DEBUG
+SECURE_HSTS_SECONDS = 0 if DEBUG else 60 * 60 * 24 * 30
+SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
+SECURE_HSTS_PRELOAD = not DEBUG
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 
 # Application definition
@@ -155,5 +171,8 @@ STATIC_URL = "static/"
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+EMAIL_BACKEND = variavel(
+    "DJANGO_EMAIL_BACKEND",
+    "django.core.mail.backends.console.EmailBackend",
+)
 DEFAULT_FROM_EMAIL = "nao-responda@agendamento.local"
