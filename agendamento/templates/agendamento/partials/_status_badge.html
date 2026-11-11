@@ -1,0 +1,2 @@
+{# Selo de status do atendimento (RN15). Uso: {% include "agendamento/partials/_status_badge.html" with agendamento=item %} #}
+<span class="badge badge--{{ agendamento.status }}">{{ agendamento.get_status_display }}</span>

@@ -1,0 +1,260 @@
+{% extends "agendamento/base.html" %}
+{% block title %}Painel administrativo | Equilibra{% endblock %}
+{% block topbar_context %}Painel administrativo{% endblock %}
+{% block content %}
+  <header class="page-header">
+    <div class="page-header__text">
+      <span class="eyebrow">Painel administrativo</span>
+      <h1>Administração</h1>
+      <p class="lead mb-0">Gerencie os cadastros e acompanhe a operação de hoje ({{ hoje|date:"d/m/Y" }}).</p>
+    </div>
+    <div class="page-header__actions">
+      <a class="btn btn--secondary" href="{% url 'admin:agendamento_usuario_changelist' %}">
+        <svg class="icon" aria-hidden="true"><use href="#i-users"></use></svg> Gerenciar usuários
+      </a>
+      <a class="btn btn--secondary" href="{% url 'admin:agendamento_perfil_changelist' %}">
+        <svg class="icon" aria-hidden="true"><use href="#i-shield"></use></svg> Gerenciar papéis
+      </a>
+    </div>
+  </header>
+
+  <section class="grid grid--4 section" aria-label="Resumo">
+    <article class="stat">
+      <span class="stat__icon"><svg class="icon icon--lg" aria-hidden="true"><use href="#i-stethoscope"></use></svg></span>
+      <div><h2 class="sr-only">Profissionais</h2><span class="stat__value">{{ total_profissionais }}</span><span class="stat__label">Profissionais cadastrados</span></div>
+    </article>
+    <article class="stat">
+      <span class="stat__icon stat__icon--accent"><svg class="icon icon--lg" aria-hidden="true"><use href="#i-briefcase"></use></svg></span>
+      <div><h2 class="sr-only">Serviços</h2><span class="stat__value">{{ total_servicos }}</span><span class="stat__label">Serviços cadastrados</span></div>
+    </article>
+    <article class="stat">
+      <span class="stat__icon stat__icon--info"><svg class="icon icon--lg" aria-hidden="true"><use href="#i-door"></use></svg></span>
+      <div><h2 class="sr-only">Salas</h2><span class="stat__value">{{ total_salas }}</span><span class="stat__label">Salas cadastradas</span></div>
+    </article>
+    <article class="stat">
+      <span class="stat__icon stat__icon--warning"><svg class="icon icon--lg" aria-hidden="true"><use href="#i-box"></use></svg></span>
+      <div><h2 class="sr-only">Equipamentos</h2><span class="stat__value">{{ total_recursos }}</span><span class="stat__label">Equipamentos cadastrados</span></div>
+    </article>
+  </section>
+
+  <nav class="subnav" aria-label="Seções do painel">
+    <a href="#agendamentos-heading"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-calendar"></use></svg> Hoje</a>
+    <a href="#profissionais-heading"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-stethoscope"></use></svg> Profissionais</a>
+    <a href="#servicos-heading"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-briefcase"></use></svg> Serviços</a>
+    <a href="#salas-heading"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-door"></use></svg> Salas</a>
+    <a href="#recursos-heading"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-box"></use></svg> Equipamentos</a>
+    <a href="#usuarios-heading"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-shield"></use></svg> Usuários</a>
+  </nav>
+
+  <section class="section" aria-labelledby="agendamentos-heading">
+    <div class="section__header">
+      <h2 id="agendamentos-heading">Agendamentos de hoje</h2>
+      <span class="badge badge--brand badge--plain">{{ agendamentos_hoje|length }} no total</span>
+    </div>
+    {% if agendamentos_hoje %}
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr><th>Horário</th><th>Serviço</th><th>Cliente</th><th>Profissional</th><th>Sala e equipamentos</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            {% for agendamento in agendamentos_hoje %}
+              <tr>
+                <td class="cell-strong">{{ agendamento.data_hora_inicio|date:"H:i" }}–{{ agendamento.data_hora_fim|date:"H:i" }}</td>
+                <td>{{ agendamento.servico.nome }}</td>
+                <td>Cliente: {{ agendamento.cliente.nome }}</td>
+                <td>Profissional: {{ agendamento.profissional.nome }}</td>
+                <td class="muted">
+                  Sala: {{ agendamento.sala|default:"Não reservada" }}
+                  {% if agendamento.recursos.all %}
+                    · Equipamentos:
+                    {% for recurso in agendamento.recursos.all %}{% if not forloop.first %}, {% endif %}{{ recurso.nome }}{% endfor %}
+                  {% endif %}
+                </td>
+                <td>{% include "agendamento/partials/_status_badge.html" with agendamento=agendamento %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      {% include "agendamento/partials/_empty_state.html" with icon="calendar" title="Dia tranquilo" text="Não há agendamentos para hoje." %}
+    {% endif %}
+  </section>
+
+  <section class="section" aria-labelledby="profissionais-heading">
+    <div class="section__header">
+      <h2 id="profissionais-heading">Profissionais</h2>
+      <a class="btn btn--sm" href="{% url 'administracao_profissional_novo' %}"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-plus"></use></svg> Cadastrar profissional</a>
+    </div>
+    {% if profissionais %}
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Nome</th><th>Especialidade</th><th>Modalidade</th><th>E-mail</th><th>Situação</th><th><span class="sr-only">Ações</span></th></tr></thead>
+          <tbody>
+            {% for profissional in profissionais %}
+              <tr>
+                <td>
+                  <span class="row row--tight">
+                    <span class="avatar avatar--{{ profissional.modalidade }}" aria-hidden="true">{{ profissional.nome|slice:":1" }}</span>
+                    <span class="cell-strong">{{ profissional.nome }}</span>
+                  </span>
+                </td>
+                <td>{{ profissional.especialidade }}</td>
+                <td>{{ profissional.get_modalidade_display }}</td>
+                <td class="muted">{{ profissional.email }}</td>
+                <td>{% if profissional.is_active %}<span class="badge badge--confirmado">Ativo</span>{% else %}<span class="badge badge--concluido">Inativo</span>{% endif %}</td>
+                <td class="cell-actions"><a class="btn btn--ghost btn--sm" href="{% url 'administracao_profissional_editar' profissional.pk %}"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-edit"></use></svg> Editar profissional</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      {% include "agendamento/partials/_empty_state.html" with icon="stethoscope" title="Sem profissionais" text="Nenhum profissional cadastrado." %}
+    {% endif %}
+  </section>
+
+  <section class="section" aria-labelledby="servicos-heading">
+    <div class="section__header">
+      <h2 id="servicos-heading">Serviços</h2>
+      <a class="btn btn--sm" href="{% url 'administracao_servico_novo' %}"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-plus"></use></svg> Cadastrar serviço</a>
+    </div>
+    {% if servicos %}
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Serviço</th><th>Tipo</th><th>Duração</th><th>Profissional</th><th><span class="sr-only">Ações</span></th></tr></thead>
+          <tbody>
+            {% for servico in servicos %}
+              <tr>
+                <td class="cell-strong">{{ servico.nome }}</td>
+                <td>{{ servico.tipo }}</td>
+                <td>{{ servico.duracao_minutos }} minutos</td>
+                <td class="muted">Profissional: {{ servico.profissional.nome }}</td>
+                <td class="cell-actions"><a class="btn btn--ghost btn--sm" href="{% url 'administracao_servico_editar' servico.pk %}"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-edit"></use></svg> Editar serviço</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      {% include "agendamento/partials/_empty_state.html" with icon="briefcase" title="Sem serviços" text="Nenhum serviço cadastrado." %}
+    {% endif %}
+  </section>
+
+  <section class="section" aria-labelledby="salas-heading">
+    <div class="section__header">
+      <h2 id="salas-heading">Salas e ocupação de hoje</h2>
+      <a class="btn btn--sm" href="{% url 'administracao_sala_nova' %}"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-plus"></use></svg> Cadastrar sala</a>
+    </div>
+    {% if salas %}
+      <div class="grid grid--3">
+        {% for sala in salas %}
+          <article class="card">
+            <div class="card__header">
+              <div>
+                <h3 class="card__title">{{ sala.nome }}</h3>
+                <p class="card__meta mb-0">Capacidade: {{ sala.capacidade }} pessoas</p>
+              </div>
+              <span class="stat__icon stat__icon--info stat__icon--sm"><svg class="icon" aria-hidden="true"><use href="#i-door"></use></svg></span>
+            </div>
+            <p><strong>{{ sala.agendamentos.all|length }}</strong> agendamentos ativos hoje</p>
+            {% if sala.agendamentos.all %}
+              <ul class="week-list">
+                {% for agendamento in sala.agendamentos.all %}
+                  <li><strong>{{ agendamento.data_hora_inicio|date:"H:i" }}–{{ agendamento.data_hora_fim|date:"H:i" }}</strong> <span>{{ agendamento.servico.nome }}</span></li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p class="muted text-sm mb-0">Sem reservas hoje.</p>
+            {% endif %}
+            <div class="card__footer">
+              <a class="btn btn--ghost btn--sm" href="{% url 'administracao_sala_editar' sala.pk %}"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-edit"></use></svg> Editar sala</a>
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      {% include "agendamento/partials/_empty_state.html" with icon="door" title="Sem salas" text="Nenhuma sala cadastrada." %}
+    {% endif %}
+  </section>
+
+  <section class="section" aria-labelledby="recursos-heading">
+    <div class="section__header">
+      <h2 id="recursos-heading">Equipamentos e ocupação de hoje</h2>
+      <a class="btn btn--sm" href="{% url 'administracao_recurso_novo' %}"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-plus"></use></svg> Cadastrar equipamento</a>
+    </div>
+    {% if recursos %}
+      <div class="grid grid--3">
+        {% for recurso in recursos %}
+          <article class="card">
+            <div class="card__header">
+              <div>
+                <h3 class="card__title">{{ recurso.nome }}</h3>
+                <p class="card__meta mb-0">{% if recurso.exclusivo %}Uso exclusivo{% else %}Uso compartilhado{% endif %}</p>
+              </div>
+              {% if recurso.exclusivo %}<span class="badge badge--warning badge--plain">Exclusivo</span>{% endif %}
+            </div>
+            <p><strong>{{ recurso.agendamentos.all|length }}</strong> agendamentos ativos hoje</p>
+            {% if recurso.agendamentos.all %}
+              <ul class="week-list">
+                {% for agendamento in recurso.agendamentos.all %}
+                  <li><strong>{{ agendamento.data_hora_inicio|date:"H:i" }}–{{ agendamento.data_hora_fim|date:"H:i" }}</strong> <span>{{ agendamento.servico.nome }}</span></li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p class="muted text-sm mb-0">Sem reservas hoje.</p>
+            {% endif %}
+            <div class="card__footer">
+              <a class="btn btn--ghost btn--sm" href="{% url 'administracao_recurso_editar' recurso.pk %}"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-edit"></use></svg> Editar equipamento</a>
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      {% include "agendamento/partials/_empty_state.html" with icon="box" title="Sem equipamentos" text="Nenhum equipamento cadastrado." %}
+    {% endif %}
+  </section>
+
+  <section class="section" aria-labelledby="usuarios-heading">
+    <div class="section__header">
+      <div>
+        <h2 id="usuarios-heading">Usuários e permissões</h2>
+        <p class="muted text-sm">O papel determina as operações disponíveis para cada pessoa (RN08, RN09 e RN14).</p>
+      </div>
+      <div class="row">
+        <a class="btn btn--secondary btn--sm" href="{% url 'admin:agendamento_usuario_changelist' %}">Gerenciar contas, acesso e status</a>
+        <a class="btn btn--sm" href="{% url 'admin:agendamento_perfil_changelist' %}">Atribuir papel a um usuário</a>
+      </div>
+    </div>
+
+    <div class="grid grid--4 mb-5">
+      {% for nome, permissoes in papeis %}
+        <article class="card card--soft">
+          <h3 class="card__title text-sm"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-shield"></use></svg> {{ nome }}</h3>
+          <p class="muted text-sm mb-0">{{ permissoes }}</p>
+        </article>
+      {% endfor %}
+    </div>
+
+    {% if usuarios %}
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Situação</th></tr></thead>
+          <tbody>
+            {% for usuario in usuarios %}
+              <tr>
+                <td class="cell-strong">{{ usuario.nome }}</td>
+                <td class="muted">{{ usuario.email }}</td>
+                <td><span class="badge badge--brand badge--plain">{{ usuario.perfil.get_papel_display }}</span></td>
+                <td>{% if usuario.is_active %}<span class="badge badge--confirmado">Ativo</span>{% else %}<span class="badge badge--concluido">Inativo</span>{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      {% include "agendamento/partials/_empty_state.html" with icon="users" title="Sem usuários" text="Nenhum usuário cadastrado." %}
+    {% endif %}
+  </section>
+{% endblock %}

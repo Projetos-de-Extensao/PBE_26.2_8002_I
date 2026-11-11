@@ -1,0 +1,41 @@
+{% load static %}<!doctype html>
+<html lang="pt-br">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#073b3a">
+    <title>{% block title %}Agendamento{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'agendamento/css/app.css' %}">
+    {% block extra_head %}{% endblock %}
+  </head>
+  <body>
+    {% include "agendamento/partials/_icons.html" %}
+
+    <div class="auth">
+      <section class="auth__brand" aria-label="Sobre a plataforma">
+        {% include "agendamento/partials/_brand.html" %}
+        <div>
+          <p class="auth__headline">Saúde, treino e bem-estar com a agenda no mesmo lugar.</p>
+          <p class="auth__lead">Encontre profissionais, veja horários livres e acompanhe seus atendimentos sem complicação.</p>
+          <ul class="auth__features">
+            <li><svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg> Busca por especialidade, serviço e modalidade</li>
+            <li><svg class="icon" aria-hidden="true"><use href="#i-calendar"></use></svg> Horários livres de acordo com a disponibilidade do profissional</li>
+            <li><svg class="icon" aria-hidden="true"><use href="#i-shield"></use></svg> Acesso de acordo com o seu perfil</li>
+          </ul>
+        </div>
+        <p class="auth__foot">Personal trainers · Nutricionistas · Fisioterapeutas · Avaliações</p>
+      </section>
+
+      <main class="auth__panel" id="conteudo">
+        <div class="auth__card">
+          <div class="auth__mobile-brand">{% include "agendamento/partials/_brand.html" %}</div>
+          {% include "agendamento/partials/_messages.html" %}
+          {% block content %}{% endblock %}
+        </div>
+      </main>
+    </div>
+
+    <script src="{% static 'agendamento/js/app.js' %}" defer></script>
+    {% block scripts %}{% endblock %}
+  </body>
+</html>
