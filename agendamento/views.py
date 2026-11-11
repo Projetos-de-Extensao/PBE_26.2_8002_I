@@ -2,6 +2,7 @@ from datetime import date, datetime, time, timedelta
 
 from django import forms
 from django.contrib import messages
+from django.contrib.auth import login
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView as DjangoLoginView
@@ -220,15 +221,22 @@ class CadastroForm(forms.Form):
 class CadastroView(FormView):
     form_class = CadastroForm
     template_name = "agendamento/cadastro.html"
-    success_url = reverse_lazy("login")
+    success_url = reverse_lazy("inicio")
 
     def form_valid(self, form):
-        form.save()
+        usuario = form.save()
+        # Entra direto na conta recém-criada: pedir a senha de novo logo após
+        # digitá-la duas vezes não acrescenta nada.
+        login(
+            self.request,
+            usuario,
+            backend="django.contrib.auth.backends.ModelBackend",
+        )
         messages.success(
             self.request,
-            _("Conta criada com sucesso. Entre com seu e-mail e senha."),
+            _("Conta criada com sucesso. Bem-vindo(a) ao Equilibra!"),
         )
-        return super().form_valid(form)
+        return HttpResponseRedirect(_url_tela_inicial(usuario))
 
 
 class InicioView(LoginRequiredMixin, TemplateView):

@@ -267,6 +267,22 @@ class CadastroViewTests(TestCase):
         self.assertTrue(usuario.check_password("Nuvem#Roxa39!Chuva"))
         self.assertContains(response, "Conta criada com sucesso")
 
+    def test_entra_automaticamente_apos_o_cadastro(self):
+        response = self.client.post(
+            reverse("cadastro"),
+            {
+                "nome": "Cliente Novo",
+                "email": "auto@exemplo.com",
+                "papel": Perfil.Papel.CLIENTE,
+                "senha": "Nuvem#Roxa39!Chuva",
+                "confirmar_senha": "Nuvem#Roxa39!Chuva",
+            },
+        )
+
+        self.assertRedirects(response, reverse("inicio"))
+        usuario = Usuario.objects.get(email="auto@exemplo.com")
+        self.assertEqual(int(self.client.session["_auth_user_id"]), usuario.pk)
+
     def test_rejeita_email_duplicado(self):
         papel = Papel.objects.create(nome="Cliente")
         Usuario.objects.create_user(
