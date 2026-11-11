@@ -2130,6 +2130,14 @@ class RecepcaoAgendamentoTests(TestCase):
 
         self.assertEqual(self.client.get(reverse("recepcao_agenda")).status_code, 403)
 
+    def test_tela_inicial_da_recepcao_oferece_as_acoes_reais(self):
+        self.client.force_login(self.recepcionista)
+
+        response = self.client.get(reverse("inicio"))
+
+        self.assertNotContains(response, "Em breve")
+        self.assertContains(response, reverse("recepcao_agenda"))
+
     def test_recepcionista_continua_sem_acesso_administrativo(self):
         self.client.force_login(self.recepcionista)
 
