@@ -2002,6 +2002,140 @@ class HorariosLivresTests(TestCase):
         self.assertEqual(horarios_livres(self.prof, self.dia + timedelta(days=1), 30), [])
 
 
+class RecepcaoAgendamentoTests(TestCase):
+    """RF25 e RN14: a recepção agenda em nome do cliente, sem acesso administrativo."""
+
+    def setUp(self):
+        self.recepcionista = Recepcionista.objects.create_user(
+            email="recepcao-rf25@exemplo.com", password="Senha#Forte123",
+            nome="Fernanda Recepção", papel="recepcionista",
+        )
+        self.cliente = Cliente.objects.create_user(
+            email="cliente-rf25@exemplo.com", password="Senha#Forte123",
+            nome="Ana Souza", papel="cliente",
+        )
+        self.profissional = Profissional.objects.create_user(
+            email="prof-rf25@exemplo.com", password="Senha#Forte123",
+            nome="Carla Dias", especialidade="Fisioterapia", papel="profissional",
+        )
+        self.dia = timezone.localdate() + timedelta(days=1)
+        Disponibilidade.objects.create(
+            profissional=self.profissional, dia_semana=self.dia.weekday(),
+            hora_inicio=time(8), hora_fim=time(18),
+        )
+        self.servico = Servico.objects.create(
+            profissional=self.profissional, nome="Sessão", tipo="Fisioterapia",
+            duracao_minutos=60,
+        )
+        self.url = reverse("recepcao_agendar", args=[self.servico.pk])
+        self.horario = _aware(self.dia, time(9))
+
+    def test_recepcionista_abre_a_tela_de_agendar_para_cliente(self):
+        self.client.force_login(self.recepcionista)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Agendar para cliente")
+        self.assertContains(response, self.cliente.nome)
+
+    def test_cliente_nao_abre_a_tela_da_recepcao(self):
+        self.client.force_login(self.cliente)
+
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+
+    def test_profissional_nao_abre_a_tela_da_recepcao(self):
+        self.client.force_login(self.profissional)
+
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+
+    def test_cria_agendamento_para_o_cliente_escolhido(self):
+        self.client.force_login(self.recepcionista)
+
+        response = self.client.post(
+            self.url,
+            {"cliente": self.cliente.pk, "horario": self.horario.isoformat()},
+            follow=True,
+        )
+
+        agendamento = Agendamento.objects.get()
+        self.assertEqual(agendamento.cliente_id, self.cliente.pk)
+        self.assertEqual(agendamento.profissional_id, self.profissional.pk)
+        self.assertEqual(agendamento.recepcionista_id, self.recepcionista.pk)
+        self.assertEqual(agendamento.data_hora_inicio, self.horario)
+        self.assertContains(response, "Agendamento confirmado com sucesso.")
+
+    def test_exige_escolher_o_cliente(self):
+        self.client.force_login(self.recepcionista)
+
+        response = self.client.post(self.url, {"horario": self.horario.isoformat()})
+
+        self.assertEqual(Agendamento.objects.count(), 0)
+        self.assertContains(response, "Este campo é obrigatório.")
+
+    def test_respeita_conflito_do_profissional(self):
+        outro_cliente = Cliente.objects.create_user(
+            email="outro-rf25@exemplo.com", password="Senha#Forte123",
+            nome="Bruno Lima", papel="cliente",
+        )
+        Agendamento.objects.create(
+            cliente=outro_cliente, profissional=self.profissional,
+            servico=self.servico, data_hora_inicio=self.horario,
+            data_hora_fim=self.horario + timedelta(hours=1),
+        )
+        self.client.force_login(self.recepcionista)
+
+        response = self.client.post(
+            self.url,
+            {"cliente": self.cliente.pk, "horario": self.horario.isoformat()},
+        )
+
+        self.assertEqual(Agendamento.objects.count(), 1)
+        # O horário ocupado nem aparece na lista, então o formulário o recusa.
+        self.assertContains(response, "Este horário não está mais disponível")
+
+    def test_agenda_do_dia_lista_os_atendimentos(self):
+        Agendamento.objects.create(
+            cliente=self.cliente, profissional=self.profissional,
+            servico=self.servico, data_hora_inicio=self.horario,
+            data_hora_fim=self.horario + timedelta(hours=1),
+        )
+        self.client.force_login(self.recepcionista)
+
+        response = self.client.get(
+            reverse("recepcao_agenda"), {"dia": self.dia.isoformat()}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.cliente.nome)
+        self.assertContains(response, self.profissional.nome)
+
+    def test_agenda_do_dia_mostra_apenas_o_dia_pedido(self):
+        Agendamento.objects.create(
+            cliente=self.cliente, profissional=self.profissional,
+            servico=self.servico, data_hora_inicio=self.horario,
+            data_hora_fim=self.horario + timedelta(hours=1),
+        )
+        self.client.force_login(self.recepcionista)
+
+        response = self.client.get(
+            reverse("recepcao_agenda"),
+            {"dia": (self.dia + timedelta(days=1)).isoformat()},
+        )
+
+        self.assertContains(response, "Nenhum atendimento neste dia")
+
+    def test_cliente_nao_abre_a_agenda_da_recepcao(self):
+        self.client.force_login(self.cliente)
+
+        self.assertEqual(self.client.get(reverse("recepcao_agenda")).status_code, 403)
+
+    def test_recepcionista_continua_sem_acesso_administrativo(self):
+        self.client.force_login(self.recepcionista)
+
+        self.assertEqual(self.client.get(reverse("administracao")).status_code, 403)
+
+
 class EquipamentoExclusivoTests(TestCase):
     """RN04: o mesmo equipamento exclusivo não pode ser reservado duas vezes."""
 
