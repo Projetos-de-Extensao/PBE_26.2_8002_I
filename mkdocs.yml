@@ -8,6 +8,7 @@ nav:
   - Home: index.md
   - Iniciação: 
       - Index: Iniciacao/index.md
+      - Documento de Visão: Iniciacao/documento_de_visao.md
       - Pesquisa: Iniciacao/pesquisa.md
       - 5w2h: Iniciacao/5w2h.md
       - Design Thinking: Iniciacao/design_thinking.md
