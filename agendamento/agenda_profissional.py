@@ -5,7 +5,7 @@ models deste projeto: o profissional é o próprio usuário autenticado e o
 bloqueio guarda início e fim como data e hora (``inicio``/``fim``).
 """
 
-from datetime import datetime
+from datetime import date, datetime, time, timedelta
 
 from django import forms
 from django.contrib import messages
@@ -18,8 +18,15 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext_lazy as _
 from django.views import View
+from django.views.generic import ListView
 
-from agendamento.models import Bloqueio, Disponibilidade, Perfil, Profissional
+from agendamento.models import (
+    Agendamento,
+    Bloqueio,
+    Disponibilidade,
+    Perfil,
+    Profissional,
+)
 from agendamento.views import _acesso_negado
 
 
@@ -223,3 +230,54 @@ class RemoverBloqueioView(ProfissionalRoleRequiredMixin, View):
         bloqueio.delete()
         messages.success(request, _("Bloqueio removido."))
         return HttpResponseRedirect(reverse("disponibilidade_bloqueio"))
+
+
+class PainelProfissionalView(ProfissionalRoleRequiredMixin, ListView):
+    """Agenda do profissional, dia a dia (UC9, RF18, protótipo 09).
+
+    A tela inicial mostra apenas os próximos atendimentos; aqui o profissional
+    navega por data, como o protótipo previa.
+    """
+
+    model = Agendamento
+    context_object_name = "agendamentos"
+    template_name = "agendamento/painel_profissional.html"
+
+    def dia(self):
+        valor = self.request.GET.get("dia", "").strip()
+        try:
+            return date.fromisoformat(valor) if valor else timezone.localdate()
+        except ValueError:
+            return timezone.localdate()
+
+    def get_queryset(self):
+        dia = self.dia()
+        inicio = timezone.make_aware(datetime.combine(dia, time.min))
+        return (
+            Agendamento.objects.filter(
+                profissional=self.profissional,
+                data_hora_inicio__gte=inicio,
+                data_hora_inicio__lt=inicio + timedelta(days=1),
+            )
+            .select_related("cliente", "servico", "sala")
+            .prefetch_related("recursos")
+            .order_by("data_hora_inicio")
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        dia = self.dia()
+        context.update(
+            {
+                "profissional": self.profissional,
+                "dia": dia,
+                "dia_anterior": dia - timedelta(days=1),
+                "dia_seguinte": dia + timedelta(days=1),
+                "hoje": timezone.localdate(),
+                "bloqueios": Bloqueio.objects.filter(
+                    profissional=self.profissional,
+                    inicio__date=dia,
+                ).order_by("inicio"),
+            }
+        )
+        return context
