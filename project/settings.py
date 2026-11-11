@@ -10,22 +10,47 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+def variavel(nome, padrao=""):
+    """Lê uma variável de ambiente, com valor padrão para o uso local."""
+    return os.environ.get(nome, padrao)
+
+
+def variavel_booleana(nome, padrao=False):
+    valor = os.environ.get(nome)
+    if valor is None:
+        return padrao
+    return valor.strip().lower() in {"1", "true", "on", "sim", "yes"}
+
+
+def variavel_lista(nome, padrao=""):
+    valor = variavel(nome, padrao)
+    return [item.strip() for item in valor.split(",") if item.strip()]
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-9jjh5xq!forpa^l6^+7_o+6%7*y7nqv@3c0887&sedal$ax8wt"
+# A chave e o modo de depuração vêm do ambiente (ver .env.example). Os valores
+# padrão servem apenas para rodar na própria máquina; em produção, defina
+# DJANGO_SECRET_KEY e DJANGO_DEBUG=0 (RNF12).
+SECRET_KEY = variavel(
+    "DJANGO_SECRET_KEY",
+    "django-insecure-apenas-para-desenvolvimento-local",
+)
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = variavel_booleana("DJANGO_DEBUG", True)
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = variavel_lista(
+    "DJANGO_ALLOWED_HOSTS",
+    "localhost,127.0.0.1,[::1]",
+)
 CSRF_TRUSTED_ORIGINS = [
     "https://localhost:8000",
     "http://localhost:8000",
