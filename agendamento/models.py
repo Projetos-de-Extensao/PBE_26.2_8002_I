@@ -77,6 +77,7 @@ class Usuario(AbstractUser):
     username = None
     email = models.EmailField(unique=True)
     nome = models.CharField(max_length=150)
+    telefone = models.CharField(max_length=20, blank=True)
     objects = UsuarioManager()
 
     USERNAME_FIELD = "email"
