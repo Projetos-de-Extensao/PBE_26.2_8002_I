@@ -388,13 +388,13 @@ class ProfissionalDetailView(DetailView):
                 servico,
             )
         context["servicos"] = servicos
-        context["pode_agendar"] = (
-            self.request.user.is_authenticated
-            and Perfil.objects.filter(
-                usuario_id=self.request.user.pk,
-                papel=Perfil.Papel.CLIENTE,
-            ).exists()
+        papel = (
+            self.request.user.perfil.papel
+            if self.request.user.is_authenticated
+            else None
         )
+        context["pode_agendar"] = papel == Perfil.Papel.CLIENTE
+        context["eh_recepcionista"] = papel == Perfil.Papel.RECEPCIONISTA
         return context
 
 
@@ -494,11 +494,14 @@ class ClienteRoleRequiredMixin(LoginRequiredMixin):
         return super().dispatch(request, *args, **kwargs)
 
 
-class NovoAgendamentoView(ClienteRoleRequiredMixin, FormView):
-    """Agendamento de um serviço (UC5, RF10).
+class _AgendamentoBaseView(LoginRequiredMixin, FormView):
+    """Fluxo de agendamento de um serviço (UC5, RF10).
 
     Quando o horário não pode ser reservado, a tela informa o motivo e sugere
     outros horários livres (RF26), preferindo o mesmo dia.
+
+    Serve tanto ao cliente agendando para si quanto à recepção agendando em
+    nome de um cliente (RF25): o que muda é de onde vem o cliente.
     """
 
     form_class = AgendamentoForm
@@ -539,11 +542,20 @@ class NovoAgendamentoView(ClienteRoleRequiredMixin, FormView):
         context["sugestoes"] = self.sugestoes
         return context
 
+    def get_cliente(self, form):
+        """Quem recebe o atendimento. O cliente agenda para si mesmo."""
+        return self.cliente
+
+    def get_recepcionista(self):
+        """Quem operou o agendamento, quando não foi o próprio cliente."""
+        return None
+
     def _novo_agendamento(self, cliente, inicio, sala):
         return Agendamento(
             cliente=cliente,
             profissional=self.servico.profissional,
             servico=self.servico,
+            recepcionista=self.get_recepcionista(),
             sala=sala,
             data_hora_inicio=inicio,
             data_hora_fim=self.servico.calcular_horario_fim(inicio),
@@ -570,7 +582,7 @@ class NovoAgendamentoView(ClienteRoleRequiredMixin, FormView):
         inicio = datetime.fromisoformat(form.cleaned_data["horario"])
         sala = form.cleaned_data.get("sala")
         recursos = list(form.cleaned_data.get("recursos") or [])
-        cliente = self.cliente
+        cliente = self.get_cliente(form)
         if form.cleaned_data.get("repetir_semanal"):
             return self._criar_recorrencia(form, cliente, recursos)
 
@@ -645,6 +657,103 @@ class NovoAgendamentoView(ClienteRoleRequiredMixin, FormView):
                 % {"validas": len(validas)},
             )
         return HttpResponseRedirect(reverse("minha_agenda"))
+
+
+class NovoAgendamentoView(ClienteRoleRequiredMixin, _AgendamentoBaseView):
+    """Agendamento feito pelo próprio cliente."""
+
+
+class RecepcionistaRoleRequiredMixin(LoginRequiredMixin):
+    """Restringe a tela ao papel de recepcionista (RN14)."""
+
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return self.handle_no_permission()
+        if not Perfil.objects.filter(
+            usuario_id=request.user.pk,
+            papel=Perfil.Papel.RECEPCIONISTA,
+        ).exists():
+            return _acesso_negado(request)
+        self.recepcionista = Recepcionista.objects.get(pk=request.user.pk)
+        return super().dispatch(request, *args, **kwargs)
+
+
+class AgendamentoRecepcaoForm(AgendamentoForm):
+    """Mesmo formulário do cliente, com a escolha de para quem é o atendimento."""
+
+    cliente = forms.ModelChoiceField(
+        label=_("Cliente"),
+        queryset=Cliente.objects.filter(is_active=True).order_by("nome"),
+        empty_label=_("Selecione o cliente"),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # O cliente aparece antes dos demais campos na tela.
+        self.order_fields(["cliente", *[c for c in self.fields if c != "cliente"]])
+
+
+class RecepcaoAgendarView(RecepcionistaRoleRequiredMixin, _AgendamentoBaseView):
+    """Agendamento criado pela recepção em nome de um cliente (RF25, RN14).
+
+    Usa as mesmas regras de conflito do agendamento feito pelo cliente; o
+    atendimento fica registrado com a recepcionista que o operou.
+    """
+
+    form_class = AgendamentoRecepcaoForm
+    template_name = "agendamento/recepcao_agendar.html"
+    success_url = reverse_lazy("recepcao_agenda")
+
+    def get_cliente(self, form):
+        return form.cleaned_data["cliente"]
+
+    def get_recepcionista(self):
+        return self.recepcionista
+
+
+class RecepcaoAgendaView(RecepcionistaRoleRequiredMixin, ListView):
+    """Agenda do dia para a recepção acompanhar a operação (RF25, RN14)."""
+
+    model = Agendamento
+    context_object_name = "agendamentos"
+    template_name = "agendamento/recepcao_agenda.html"
+
+    def dia(self):
+        valor = self.request.GET.get("dia", "").strip()
+        try:
+            return date.fromisoformat(valor) if valor else timezone.localdate()
+        except ValueError:
+            return timezone.localdate()
+
+    def get_queryset(self):
+        dia = self.dia()
+        inicio = timezone.make_aware(datetime.combine(dia, time.min))
+        fim = inicio + timedelta(days=1)
+        return (
+            Agendamento.objects.filter(
+                data_hora_inicio__gte=inicio,
+                data_hora_inicio__lt=fim,
+            )
+            .select_related("cliente", "profissional", "servico", "sala")
+            .prefetch_related("recursos")
+            .order_by("data_hora_inicio")
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        dia = self.dia()
+        context.update(
+            {
+                "dia": dia,
+                "dia_anterior": dia - timedelta(days=1),
+                "dia_seguinte": dia + timedelta(days=1),
+                "hoje": timezone.localdate(),
+                "profissionais": Profissional.objects.filter(
+                    is_active=True
+                ).order_by("nome"),
+            }
+        )
+        return context
 
 
 class PreviaRecorrenciaView(NovoAgendamentoView):

@@ -34,10 +34,12 @@
         </a>
       {% elif papel == "recepcionista" %}
         <p class="nav__title">Recepção</p>
-        <span class="nav__link" aria-disabled="true" title="Depende de implementação no backend">
+        <a class="nav__link" href="{% url 'recepcao_agenda' %}"{% if url_name == "recepcao_agenda" %} aria-current="page"{% endif %}>
+          <svg class="icon" aria-hidden="true"><use href="#i-calendar"></use></svg> Agenda do dia
+        </a>
+        <a class="nav__link" href="{% url 'profissionais' %}"{% if url_name == "recepcao_agendar" %} aria-current="page"{% endif %}>
           <svg class="icon" aria-hidden="true"><use href="#i-calendar-plus"></use></svg> Agendar para cliente
-          <span class="nav__soon">Em breve</span>
-        </span>
+        </a>
       {% elif papel == "administrador" %}
         <p class="nav__title">Gestão</p>
         <a class="nav__link" href="{% url 'administracao' %}#profissionais-heading">

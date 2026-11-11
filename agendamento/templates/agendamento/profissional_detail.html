@@ -60,6 +60,8 @@
                 {% endif %}
                 {% if pode_agendar or not request.user.is_authenticated %}
                   <a class="btn btn--block" href="{% url 'novo_agendamento' servico.id %}">Agendar este serviço</a>
+                {% elif eh_recepcionista %}
+                  <a class="btn btn--block" href="{% url 'recepcao_agendar' servico.id %}">Agendar para um cliente</a>
                 {% else %}
                   <p class="muted text-sm mb-0">Somente contas de cliente podem agendar atendimentos.</p>
                 {% endif %}

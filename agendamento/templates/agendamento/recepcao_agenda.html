@@ -1,0 +1,73 @@
+{% extends "agendamento/base.html" %}
+{% block title %}Agenda do dia | Equilibra{% endblock %}
+{% block topbar_context %}Agenda do dia{% endblock %}
+{% block content %}
+  <header class="page-header">
+    <div class="page-header__text">
+      <span class="eyebrow">Recepção</span>
+      <h1>Agenda do dia</h1>
+      <p class="lead mb-0">Todos os atendimentos de {{ dia|date:"d/m/Y" }}{% if dia == hoje %} (hoje){% endif %}.</p>
+    </div>
+    <div class="page-header__actions">
+      <a class="btn btn--secondary" href="?dia={{ dia_anterior|date:'Y-m-d' }}">
+        <svg class="icon" aria-hidden="true"><use href="#i-chevron-left"></use></svg> Dia anterior
+      </a>
+      <a class="btn btn--secondary" href="?dia={{ dia_seguinte|date:'Y-m-d' }}">
+        Próximo dia <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+      </a>
+    </div>
+  </header>
+
+  {% if agendamentos %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Horário</th>
+            <th scope="col">Cliente</th>
+            <th scope="col">Profissional</th>
+            <th scope="col">Serviço</th>
+            <th scope="col">Local</th>
+            <th scope="col">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for agendamento in agendamentos %}
+            <tr>
+              <td class="cell-strong">{{ agendamento.data_hora_inicio|time:"H:i" }}–{{ agendamento.data_hora_fim|time:"H:i" }}</td>
+              <td>{{ agendamento.cliente.nome }}</td>
+              <td>{{ agendamento.profissional.nome }}</td>
+              <td>{{ agendamento.servico.nome }}</td>
+              <td>{{ agendamento.sala.nome|default:"—" }}</td>
+              <td><span class="badge badge--plain">{{ agendamento.get_status_display }}</span></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <span class="empty-state__icon"><svg class="icon icon--lg" aria-hidden="true"><use href="#i-calendar-off"></use></svg></span>
+      <h3>Nenhum atendimento neste dia</h3>
+      <p>Escolha outro dia ou crie um agendamento para um cliente.</p>
+    </div>
+  {% endif %}
+
+  <section class="section" aria-labelledby="agendar-heading">
+    <div class="section__header">
+      <h2 id="agendar-heading">Agendar para um cliente</h2>
+    </div>
+    <p class="muted">Escolha o profissional e, no perfil dele, o serviço que o cliente quer.</p>
+    <div class="grid grid--2">
+      {% for profissional in profissionais %}
+        <article class="card">
+          <h3 class="card__title">{{ profissional.nome }}</h3>
+          <p class="card__meta">{{ profissional.especialidade }}</p>
+          <a class="btn btn--block" href="{% url 'profissional_detail' profissional.pk %}">Ver serviços</a>
+        </article>
+      {% empty %}
+        <p class="muted">Nenhum profissional cadastrado ainda.</p>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}

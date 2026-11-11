@@ -1,0 +1,100 @@
+{% extends "agendamento/base.html" %}
+{% block title %}Agendar para cliente | Equilibra{% endblock %}
+{% block topbar_context %}<a class="link" href="{% url 'profissional_detail' profissional.pk %}"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-chevron-left"></use></svg> Voltar ao perfil</a>{% endblock %}
+{% block content_class %}content--narrow{% endblock %}
+{% block content %}
+  <header class="page-header">
+    <div class="page-header__text">
+      <span class="eyebrow">Recepção</span>
+      <h1>Agendar para cliente</h1>
+      <p class="lead mb-0">Escolha o cliente e um dos horários livres. As mesmas regras de conflito do agendamento feito pelo cliente são aplicadas.</p>
+    </div>
+  </header>
+
+  <div class="card mb-5">
+    <table class="summary-table">
+      <tr>
+        <th scope="row">Profissional</th>
+        <td class="cell-strong">{{ profissional.nome }}</td>
+      </tr>
+      <tr>
+        <th scope="row">Serviço</th>
+        <td class="cell-strong">{{ servico.nome }} · {{ servico.duracao_minutos }} min</td>
+      </tr>
+      {% if profissional.get_modalidade_display %}
+        <tr>
+          <th scope="row">Modalidade</th>
+          <td>{{ profissional.get_modalidade_display }}</td>
+        </tr>
+      {% endif %}
+    </table>
+  </div>
+
+  {% if form.fields.horario.choices %}
+    {% if conflito %}
+      <div class="alert alert--error" role="alert">
+        <svg class="icon" aria-hidden="true"><use href="#i-alert"></use></svg>
+        <div class="alert__body">
+          <p class="cell-strong">Não foi possível reservar este horário:</p>
+          <ul>
+            {% for motivo in conflito %}<li>{{ motivo }}</li>{% endfor %}
+          </ul>
+        </div>
+      </div>
+    {% endif %}
+
+    <form method="post" class="card form">
+      {% csrf_token %}
+      {% include "agendamento/partials/_form_errors.html" %}
+      {% include "agendamento/partials/_field.html" with field=form.cliente %}
+
+      <div class="field{% if form.horario.errors %} field--invalid{% endif %}">
+        <label for="{{ form.horario.id_for_label }}">{{ form.horario.label }}</label>
+        <select name="{{ form.horario.html_name }}" id="{{ form.horario.id_for_label }}" autocomplete="off" required>
+          {% for valor, rotulo in form.fields.horario.choices %}
+            <option value="{{ valor }}"{% if form.horario.value == valor %} selected{% endif %}>{{ rotulo }}</option>
+          {% endfor %}
+        </select>
+        {% if form.horario.errors %}
+          <div class="field__error" role="alert">{{ form.horario.errors }}</div>
+        {% endif %}
+      </div>
+
+      {% if conflito %}
+        <div class="field" id="sugestoes">
+          {% if sugestoes %}
+            <p class="label">Horários livres sugeridos:</p>
+            <div class="slot-grid">
+              {% for horario in sugestoes %}
+                <button type="submit" class="slot" name="horario" value="{{ horario.isoformat }}">
+                  {{ horario|date:"d/m" }} · {{ horario|time:"H:i" }}
+                </button>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="field__help">Não encontramos outro horário livre com essas escolhas. Tente outro local, outros equipamentos ou outro profissional.</p>
+          {% endif %}
+        </div>
+      {% endif %}
+
+      {% if form.sala %}{% include "agendamento/partials/_field.html" with field=form.sala %}{% endif %}
+      {% if form.recursos %}{% include "agendamento/partials/_field.html" with field=form.recursos %}{% endif %}
+
+      <div class="btn-row btn-row--end mt-0">
+        <a class="btn btn--ghost" href="{% url 'recepcao_agenda' %}">Voltar à agenda do dia</a>
+        <button type="submit" class="btn btn--lg">
+          <svg class="icon" aria-hidden="true"><use href="#i-check"></use></svg> Confirmar agendamento
+        </button>
+      </div>
+    </form>
+  {% else %}
+    <div class="empty-state">
+      <span class="empty-state__icon"><svg class="icon icon--lg" aria-hidden="true"><use href="#i-calendar-off"></use></svg></span>
+      <h3>Sem horários livres</h3>
+      <p>Não há horários livres para este serviço nos próximos 30 dias.</p>
+      <div class="btn-row">
+        <a class="btn btn--secondary" href="{% url 'profissionais' %}">Ver outros profissionais</a>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}

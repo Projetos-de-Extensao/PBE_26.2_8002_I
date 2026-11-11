@@ -43,6 +43,8 @@ from agendamento.administracao import (
 )
 from agendamento.views import (
     AgendaClienteView,
+    RecepcaoAgendaView,
+    RecepcaoAgendarView,
     CadastroView,
     InicioView,
     LoginView,
@@ -143,6 +145,16 @@ urlpatterns = [
         "profissional/bloqueios/<int:pk>/remover/",
         RemoverBloqueioView.as_view(),
         name="remover_bloqueio",
+    ),
+    path(
+        "recepcao/agenda/",
+        RecepcaoAgendaView.as_view(),
+        name="recepcao_agenda",
+    ),
+    path(
+        "recepcao/agendar/<int:servico_id>/",
+        RecepcaoAgendarView.as_view(),
+        name="recepcao_agendar",
     ),
     path(
         "minha-agenda/",
