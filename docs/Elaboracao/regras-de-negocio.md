@@ -21,7 +21,7 @@ Este documento reúne as regras de negócio da Plataforma Web de Agendamento Mul
 | RN06 | Um agendamento só é confirmado quando cliente, profissional e, quando aplicável, sala e recurso estiverem livres no mesmo intervalo. | RF10, RF13, RF14, RF15 |
 | RN07 | O horário de término do atendimento é calculado a partir do horário de início somado à duração do serviço. | RF05, RF10 |
 | RN08 | Todo usuário possui um papel (cliente, profissional, recepcionista ou administrador), e o papel determina o que ele pode visualizar e alterar. | RF19 |
-| RN09 | Apenas o administrador pode gerenciar usuários, profissionais, serviços, espaços, recursos e permissões. | RF04, RF05, RF06, RF19 |
+| RN09 | Apenas o administrador pode gerenciar usuários, profissionais, serviços, espaços, recursos e permissões já cadastrados. A criação da própria conta é livre para cliente, profissional e recepcionista; o papel de administrador nunca é concedido pelo cadastro. | RF04, RF05, RF06, RF19 |
 | RN10 | O cancelamento de um atendimento libera imediatamente o horário, a sala e o recurso reservados. | RF11, RF12 |
 | RN11 | Em um agendamento recorrente, cada ocorrência é validada individualmente contra as regras RN01 a RN06. | RF16 |
 | RN12 | Uma ocorrência de recorrência em conflito não pode sobrescrever uma reserva existente; ela é descartada ou reagendada. | RF16, RF26 |
@@ -33,6 +33,8 @@ Este documento reúne as regras de negócio da Plataforma Web de Agendamento Mul
 
 <p align = "justify">
 As regras RN01 a RN06 formam o núcleo do produto: a prevenção de conflitos entre cliente, profissional, sala e recurso. As regras RN08, RN09 e RN14 sustentam o controle de privilégios por papel. As demais apoiam o cálculo de horários, a recorrência, os bloqueios e o ciclo de vida do atendimento.
+
+Sobre a RN09, vale distinguir duas coisas: criar a própria conta e gerenciar o sistema. O cadastro público permite escolher entre cliente, profissional e recepcionista, porque o produto atende estabelecimentos onde o profissional se inscreve por conta própria. O papel de administrador não aparece nessa lista e uma tentativa de enviá-lo é recusada. Depois do cadastro, só o administrador altera papéis, ativa ou desativa contas e mantém serviços, salas e equipamentos, pelo painel de administração.
 </p>
 
 ## Referências
