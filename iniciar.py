@@ -23,14 +23,14 @@ from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent
 VENV = RAIZ / ".venv"
-MANAGE = RAIZ / "src" / "manage.py"
+MANAGE = RAIZ / "manage.py"
 DJANGO = "Django==6.1.2"
 HOST = "127.0.0.1"
 PORTA = 8000
-PAGINA = "/agenda/agendamentos/novo/"
+PAGINA = "/"
 
 # Acesso só para demonstração local. O servidor roda apenas nesta máquina.
-USUARIO_DEMO = "admin"
+USUARIO_DEMO = "admin@exemplo.local"
 SENHA_DEMO = "admin"
 
 
@@ -85,48 +85,27 @@ def preparar_banco(python):
 
 
 def carregar_exemplo(python):
-    """Carrega a fixture de demonstração se o banco ainda estiver vazio."""
-    script = (
-        "import django, os;"
-        "os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings');"
-        "django.setup();"
-        "from agenda.models import Agendamento;"
-        "print(Agendamento.objects.count())"
-    )
-    resultado = subprocess.run(
-        [str(python), "-c", script],
-        cwd=str(RAIZ / "src"),
-        capture_output=True,
-        text=True,
-    )
-    if resultado.returncode != 0 or resultado.stdout.strip() != "0":
-        return
-    aviso("Carregando os dados de exemplo")
-    rodar([str(python), str(MANAGE), "loaddata", "exemplo"])
+    """Cria dados de demonstração pelo comando atual e idempotente do app."""
+    aviso("Preparando dados de exemplo")
+    rodar([str(python), str(MANAGE), "criar_dados_exemplo", "--silencioso"])
 
 
 def criar_acesso_demo(python):
-    """Cria o acesso de demonstração e liga ele a um perfil de profissional."""
+    """Cria o administrador de demonstração sem alterar contas existentes."""
     script = (
         "import django, os;"
-        "os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings');"
+        "os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'project.settings');"
         "django.setup();"
-        "from django.contrib.auth import get_user_model;"
-        "from agenda.models import Profissional;"
-        "U = get_user_model();"
-        "existe = U.objects.filter(username='{usuario}').exists();"
-        "u = U.objects.get(username='{usuario}') if existe"
-        " else U.objects.create_superuser('{usuario}', '', '{senha}');"
-        # O admin também vira profissional para que o painel e a tela de
-        # disponibilidade funcionem na demonstração.
-        "Profissional.objects.get_or_create("
-        "usuario=u, defaults={{'especialidade': 'PERSONAL',"
-        " 'descricao': 'Perfil de demonstração.'}});"
+        "from agendamento.models import Usuario;"
+        "email = '{usuario}';"
+        "existe = Usuario.objects.filter(email=email).exists();"
+        "Usuario.objects.create_superuser(email=email, password='{senha}', "
+        "nome='Administrador de demonstração') if not existe else None;"
         "print('criado' if not existe else 'ja_existe')"
     ).format(usuario=USUARIO_DEMO, senha=SENHA_DEMO)
     resultado = subprocess.run(
         [str(python), "-c", script],
-        cwd=str(RAIZ / "src"),
+        cwd=str(RAIZ),
         capture_output=True,
         text=True,
     )
@@ -156,7 +135,7 @@ def main():
     abrir_navegador = "--sem-navegador" not in sys.argv
 
     if not MANAGE.exists():
-        print("Rode este script na pasta do projeto (onde está a pasta src).", flush=True)
+        print("Não encontrei manage.py na raiz do projeto.", flush=True)
         sys.exit(1)
 
     if porta_ocupada():
