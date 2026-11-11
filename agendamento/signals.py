@@ -1,12 +1,15 @@
-from django.db.models.signals import post_save
+from django.core.exceptions import ValidationError
+from django.db.models.signals import m2m_changed, post_save
 from django.dispatch import receiver
 
 from agendamento.models import (
     Administrador,
+    Agendamento,
     Cliente,
     Perfil,
     Profissional,
     Recepcionista,
+    Recurso,
     Usuario,
 )
 
@@ -45,3 +48,20 @@ def criar_perfil_de_usuario(sender, instance, created, using, **kwargs):
         usuario_id=instance.pk,
         defaults={"papel": papel},
     )
+
+
+@receiver(m2m_changed, sender=Agendamento.recursos.through)
+def validar_equipamentos_do_agendamento(sender, instance, action, pk_set, reverse, **kwargs):
+    """RN04: impede vincular um equipamento exclusivo já reservado no horário.
+
+    A verificação em ``Agendamento.clean()`` não alcança os equipamentos, que
+    só podem ser ligados depois que o agendamento é salvo. Sem esta checagem,
+    um atendimento criado pelo admin consegue reservar o mesmo equipamento
+    exclusivo duas vezes no mesmo intervalo.
+    """
+    if action != "pre_add" or reverse or not pk_set:
+        return
+    recursos = list(Recurso.objects.filter(pk__in=pk_set))
+    motivos = instance.conflitos_de_recursos(recursos=recursos)
+    if motivos:
+        raise ValidationError(motivos)

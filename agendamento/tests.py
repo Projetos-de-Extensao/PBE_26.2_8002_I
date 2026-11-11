@@ -5,6 +5,7 @@ import re
 from django.core import mail
 from django.core.management import call_command, CommandError
 from django.conf import settings
+from django.db import transaction
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -2001,6 +2002,82 @@ class HorariosLivresTests(TestCase):
         self.assertEqual(horarios_livres(self.prof, self.dia + timedelta(days=1), 30), [])
 
 
+class EquipamentoExclusivoTests(TestCase):
+    """RN04: o mesmo equipamento exclusivo não pode ser reservado duas vezes."""
+
+    def setUp(self):
+        self.cliente = Cliente.objects.create_user(
+            email="cliente-rec@exemplo.com", password="Senha#Forte123",
+            nome="Cliente Um", papel="cliente",
+        )
+        self.outro_cliente = Cliente.objects.create_user(
+            email="outro-rec@exemplo.com", password="Senha#Forte123",
+            nome="Cliente Dois", papel="cliente",
+        )
+        self.prof = Profissional.objects.create_user(
+            email="prof-rec@exemplo.com", password="Senha#Forte123", nome="Ana Silva",
+            especialidade="Fisioterapia", papel="profissional",
+        )
+        self.prof2 = Profissional.objects.create_user(
+            email="prof2-rec@exemplo.com", password="Senha#Forte123", nome="Bruno Lima",
+            especialidade="Pilates", papel="profissional",
+        )
+        self.dia = timezone.localdate() + timedelta(days=1)
+        for profissional in (self.prof, self.prof2):
+            Disponibilidade.objects.create(
+                profissional=profissional, dia_semana=self.dia.weekday(),
+                hora_inicio=time(8), hora_fim=time(18),
+            )
+        self.servico = Servico.objects.create(
+            profissional=self.prof, nome="Sessão", tipo="Fisioterapia",
+            duracao_minutos=60,
+        )
+        self.servico2 = Servico.objects.create(
+            profissional=self.prof2, nome="Pilates", tipo="Pilates",
+            duracao_minutos=60,
+        )
+        self.maca = Recurso.objects.create(nome="Maca", exclusivo=True)
+        self.colchonete = Recurso.objects.create(nome="Colchonete", exclusivo=False)
+        self.inicio = _aware(self.dia, time(10))
+
+    def _agendar(self, cliente, profissional, servico):
+        return Agendamento.objects.create(
+            cliente=cliente, profissional=profissional, servico=servico,
+            data_hora_inicio=self.inicio,
+            data_hora_fim=self.inicio + timedelta(hours=1),
+        )
+
+    def test_nao_vincula_equipamento_exclusivo_ja_reservado(self):
+        primeiro = self._agendar(self.cliente, self.prof, self.servico)
+        primeiro.recursos.set([self.maca])
+        segundo = self._agendar(self.outro_cliente, self.prof2, self.servico2)
+
+        with self.assertRaises(ValidationError), transaction.atomic():
+            segundo.recursos.set([self.maca])
+
+        self.assertEqual(segundo.recursos.count(), 0)
+
+    def test_equipamento_compartilhado_pode_repetir(self):
+        primeiro = self._agendar(self.cliente, self.prof, self.servico)
+        primeiro.recursos.set([self.colchonete])
+        segundo = self._agendar(self.outro_cliente, self.prof2, self.servico2)
+
+        segundo.recursos.set([self.colchonete])
+
+        self.assertEqual(segundo.recursos.count(), 1)
+
+    def test_equipamento_livre_apos_cancelamento(self):
+        primeiro = self._agendar(self.cliente, self.prof, self.servico)
+        primeiro.recursos.set([self.maca])
+        primeiro.status = Agendamento.Status.CANCELADO
+        primeiro.save()
+        segundo = self._agendar(self.outro_cliente, self.prof2, self.servico2)
+
+        segundo.recursos.set([self.maca])
+
+        self.assertEqual(segundo.recursos.count(), 1)
+
+
 class NovoAgendamentoConflitoViewTests(TestCase):
     def setUp(self):
         self.cliente = Cliente.objects.create_user(
@@ -2036,10 +2113,12 @@ class NovoAgendamentoConflitoViewTests(TestCase):
         self.url = reverse("novo_agendamento", args=[self.servico.pk])
         self.oito = _aware(self.dia, time(8))
 
-    def ocupar(self, cliente, profissional, servico, inicio, sala=None, recursos=()):
+    def ocupar(self, cliente, profissional, servico, inicio, sala=None, recursos=(),
+               minutos=60):
         agendamento = Agendamento.objects.create(
             cliente=cliente, profissional=profissional, servico=servico, sala=sala,
-            data_hora_inicio=inicio, data_hora_fim=inicio + timedelta(hours=1),
+            data_hora_inicio=inicio,
+            data_hora_fim=inicio + timedelta(minutes=minutos),
         )
         agendamento.recursos.set(recursos)
         return agendamento
@@ -2126,7 +2205,11 @@ class NovoAgendamentoConflitoViewTests(TestCase):
         self.assertEqual(agendamento.sala, self.sala)
 
     def test_sem_sugestoes_explica_o_que_fazer(self):
-        self.ocupar(self.outro_cliente, self.prof2, self.servico2, self.oito, recursos=[self.maca])
+        # Blocos de 30 minutos para a maca não se sobrepor a ela mesma (RN04).
+        self.ocupar(
+            self.outro_cliente, self.prof2, self.servico2, self.oito,
+            recursos=[self.maca], minutos=30,
+        )
         # Maca ocupada em todos os outros horários da lista.
         outros_horarios = [h for h in self._horarios_da_tela() if h != self.oito]
         for indice, horario in enumerate(outros_horarios):
