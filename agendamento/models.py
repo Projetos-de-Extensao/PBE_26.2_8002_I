@@ -673,17 +673,30 @@ class Agendamento(models.Model):
         if self.sala_id is not None and ativos.filter(sala_id=self.sala_id).exists():
             motivos.append(self.MSG_SALA_OCUPADA.format(sala=self.sala))
 
+        motivos.extend(self.conflitos_de_recursos(recursos))
+        return motivos
+
+    def conflitos_de_recursos(self, recursos=None):
+        """RN04: equipamentos de uso exclusivo já reservados neste intervalo.
+
+        Chamada tanto por ``motivos_conflito`` quanto pela validação que roda
+        ao vincular equipamentos ao agendamento, porque a relação só existe
+        depois que o registro é salvo.
+        """
+        if not self._periodo_informado() or self.status == self.Status.CANCELADO:
+            return []
         if recursos is None:
             recursos = list(self.recursos.all()) if self.pk is not None else []
         exclusivos = [recurso.pk for recurso in recursos if recurso.exclusivo]
-        if exclusivos:
-            ocupados = Recurso.objects.filter(
-                pk__in=exclusivos,
-                agendamentos__in=ativos,
-            ).distinct()
-            for recurso in ocupados:
-                motivos.append(self.MSG_RECURSO_OCUPADO.format(recurso=recurso))
-        return motivos
+        if not exclusivos:
+            return []
+        ocupados = Recurso.objects.filter(
+            pk__in=exclusivos,
+            agendamentos__in=self._ativos_no_periodo(),
+        ).distinct()
+        return [
+            self.MSG_RECURSO_OCUPADO.format(recurso=recurso) for recurso in ocupados
+        ]
 
     def clean(self):
         super().clean()
