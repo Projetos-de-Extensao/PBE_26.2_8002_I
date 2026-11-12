@@ -22,18 +22,29 @@ O script cria o ambiente virtual, instala o Django, aplica as migrações,
 carrega os dados de exemplo, cria o acesso de demonstração e sobe o servidor.
 O passo a passo manual está no `README.md` do repositório.
 
-## Documentação das rotas
+## API REST
 
-Com o servidor local ligado, a interface Swagger fica em
-`http://127.0.0.1:8000/docs/` e o schema OpenAPI em
-`http://127.0.0.1:8000/api/schema/`. A interface carrega os arquivos do Swagger
-UI de um CDN, portanto precisa de acesso à internet para exibir a documentação.
+A API é feita com o Django REST framework (`djangorestframework` em
+`requirements.txt`) e fica em `http://127.0.0.1:8000/api/`. Aberta no navegador,
+mostra a página navegável do framework, com a lista de endpoints e formulários
+para testar cada operação.
 
-O schema enumera as rotas Django registradas e inclui os modelos do app como
-schemas de referência. Muitas rotas são páginas HTML ou formulários do sistema,
-não endpoints de uma API REST; a inclusão de um modelo no schema também não
-significa que exista CRUD REST para ele. As operações JSON existentes estão
-indicadas nas descrições da documentação.
+Todos os models do app `agendamento` têm endpoint, com `GET`/`POST` em
+`/api/<endpoint>/` e `GET`/`PUT`/`PATCH`/`DELETE` em `/api/<endpoint>/<id>/`. As
+exceções são `/api/usuarios/` (sem `POST`: o usuário é criado pelo endpoint do
+seu tipo, como `/api/clientes/`) e `/api/perfis/` (sem `DELETE`: o perfil só
+some junto com o usuário). A lista completa está no `README.md`.
+
+| Arquivo | Conteúdo |
+| --- | --- |
+| `agendamento/serializers.py` | Um serializer por model; antes de salvar, chama o `clean()` do model |
+| `agendamento/api.py` | ViewSets e o `DefaultRouter` com os endpoints |
+| `agendamento/permissoes_api.py` | Permissão: só administradores (mesma regra do `/admin/`) |
+
+Autenticação por sessão (o mesmo login do site) e autenticação básica, para
+testar com `curl` ou Postman. Regras de negócio violadas voltam com `400` e a
+mensagem do model; excluir um registro protegido (`on_delete=PROTECT`) volta com
+`409` em vez de erro 500.
 
 ## Variáveis de ambiente
 

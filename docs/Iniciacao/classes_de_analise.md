@@ -22,22 +22,24 @@ A classe Profissional representa os diferentes profissionais que poderão utiliz
 
 Tipo: entidade. Representa qualquer profissional que ofereça serviços através da plataforma. Entre eles estão Personal Trainer, Nutricionista, Fisioterapeuta, Professor de Pilates, Preparador Físico e outros. Todos são representados pela mesma classe e diferenciados pelo atributo `especialidade`; Personal Trainer é apenas uma das especialidades.
 
+`Profissional` é uma especialização de `Usuario` (herança do Django): herda os dados de acesso e de contato e acrescenta os dados profissionais.
+
 ### Atributos
 
 | Atributo | Descrição |
 |---|---|
-| id | Identificador do profissional |
-| usuario | Usuário relacionado (relação 1 para 1) |
-| especialidade | Área de atuação (Personal Trainer, Nutricionista, Fisioterapeuta, Professor de Pilates, Preparador Físico ou Outro) |
-| registro_profissional | Registro profissional quando aplicável |
-| telefone | Contato do profissional |
+| id | Identificador (o mesmo do usuário) |
+| email | E-mail usado no login (herdado de `Usuario`, único) |
+| nome | Nome exibido no sistema (herdado de `Usuario`) |
+| telefone | Contato (herdado de `Usuario`, opcional) |
+| especialidade | Área de atuação, em texto livre (ex.: Fisioterapia, Nutrição, Pilates) |
 | modalidade | Presencial, online ou híbrido |
-| descricao | Informações profissionais |
-| ativo | Indica se está ativo no sistema |
+| formacao | Formação profissional (opcional) |
+| apresentacao | Texto de apresentação exibido no perfil (opcional) |
 
 ## Classe Agendamento
 
-Tipo: entidade. Representa uma reserva de atendimento entre um cliente e um profissional.
+Tipo: entidade. Representa uma reserva de atendimento entre um cliente e um profissional, para um serviço, em um intervalo de data e hora.
 
 ### Atributos
 
@@ -46,20 +48,24 @@ Tipo: entidade. Representa uma reserva de atendimento entre um cliente e um prof
 | id | Identificador do agendamento |
 | cliente | Cliente que receberá o atendimento |
 | profissional | Profissional responsável |
-| servico | Serviço agendado |
-| data | Data do atendimento |
-| hora_inicio | Horário de início |
-| hora_fim | Horário de término |
-| status | Situação: Agendado, Confirmado, Concluído ou Cancelado |
-| observacao | Observações opcionais |
-| criado_em | Data de criação |
+| servico | Serviço agendado; sua duração define o horário de término |
+| recepcionista | Recepcionista que registrou o atendimento, quando feito pela recepção (opcional) |
+| sala | Sala reservada (opcional) |
+| recursos | Equipamentos reservados (zero ou mais) |
+| recorrencia | Série semanal à qual o atendimento pertence (opcional) |
+| data_hora_inicio | Data e hora de início |
+| data_hora_fim | Data e hora de término |
+| status | Situação: Agendado, Confirmado, Cancelado ou Concluído |
 
 ### Regras validadas
 
-- o horário final deve ser posterior ao inicial;
-- um profissional não pode ter dois agendamentos ativos sobrepostos;
-- um cliente não pode ter dois agendamentos ativos sobrepostos;
-- agendamentos cancelados não bloqueiam novos horários.
+- o horário final deve ser posterior ao inicial; se não for informado, é calculado pela duração do serviço (RN07);
+- o horário precisa caber numa faixa de disponibilidade do profissional (RN05) e não pode cair num bloqueio (RN13);
+- um profissional não pode ter dois agendamentos ativos sobrepostos (RN01);
+- um cliente não pode ter dois agendamentos ativos sobrepostos (RN02);
+- uma sala não pode ser reservada duas vezes no mesmo intervalo (RN03);
+- um equipamento de uso exclusivo não pode ser reservado duas vezes no mesmo intervalo (RN04);
+- agendamentos cancelados não bloqueiam novos horários, e agendamentos concluídos não são revalidados.
 
 ## Diagrama
 
@@ -69,34 +75,42 @@ title Classes de Análise - Plataforma de Agendamento Multidisciplinar
 
 class Usuario {
     +id: int
-    +username: string
     +email: string
+    +nome: string
+    +telefone: string
 }
 
+class Cliente
+
 class Profissional {
-    +id: int
     +especialidade: string
-    +registro_profissional: string
-    +telefone: string
     +modalidade: string
-    +descricao: text
-    +ativo: boolean
+    +formacao: text
+    +apresentacao: text
+}
+
+class Servico {
+    +id: int
+    +nome: string
+    +tipo: string
+    +duracao_minutos: int
 }
 
 class Agendamento {
     +id: int
-    +servico: string
-    +data: date
-    +hora_inicio: time
-    +hora_fim: time
+    +data_hora_inicio: datetime
+    +data_hora_fim: datetime
     +status: string
-    +observacao: text
-    +criado_em: datetime
+    +motivos_conflito(): List<string>
+    +verificar_conflito(): boolean
 }
 
-Usuario "1" -- "0..1" Profissional : possui perfil
-Usuario "1" -- "0..*" Agendamento : realiza como cliente
+Usuario <|-- Cliente
+Usuario <|-- Profissional
+Profissional "1" -- "0..*" Servico : oferece
+Cliente "1" -- "0..*" Agendamento : realiza
 Profissional "1" -- "0..*" Agendamento : atende
+Servico "1" -- "0..*" Agendamento : é utilizado em
 
 @enduml
 ```
@@ -105,17 +119,18 @@ Fonte: [classes_analise.puml](./classes_analise.puml).
 
 ## Relacionamentos
 
-Um cliente pode possuir vários agendamentos. Um profissional pode possuir vários agendamentos. Cada agendamento deve estar relacionado a um cliente e a um profissional. Um usuário profissional possui um perfil `Profissional`.
+Um cliente pode possuir vários agendamentos. Um profissional pode possuir vários agendamentos e oferecer vários serviços. Cada agendamento está relacionado a um cliente, a um profissional e a um serviço. `Cliente` e `Profissional` são especializações de `Usuario`.
 
 ## Implementação
 
 As duas classes foram implementadas no app `agendamento` do projeto Django (`agendamento/models.py`) como Django Models, e registradas no Django Admin.
 
 - `Profissional` é uma especialização de `Usuario`, com especialidade, modalidade de atendimento, formação e apresentação.
-- `Agendamento` possui `ForeignKey` para o cliente, para o profissional, para o serviço e para a sala, além de relação com os equipamentos utilizados.
+- `Agendamento` possui `ForeignKey` para o cliente, o profissional, o serviço, a recepcionista, a sala e a recorrência, e `ManyToManyField` para os equipamentos (`Recurso`).
 - O serviço deixou de ser um campo de texto e virou a classe `Servico`, com duração em minutos, que define o horário de término do atendimento.
-- As validações são feitas no back-end, em `Agendamento.clean()`, chamado também em `save()`, cobrindo conflito de profissional, de cliente, de sala e de equipamento exclusivo, além da disponibilidade e dos bloqueios do profissional.
+- As validações ficam no back-end, em `Agendamento.clean()` e `Agendamento.motivos_conflito()`. As telas chamam essa validação pelo `full_clean()` dos formulários, e a API REST (`/api/agendamentos/`) chama o mesmo `clean()` antes de salvar. O conflito de equipamento exclusivo também é checado ao vincular os equipamentos (`agendamento/signals.py`).
 - As migrations do Django transformam essas classes em tabelas no banco de dados.
+- As duas classes também têm CRUD na API REST: `/api/profissionais/` e `/api/agendamentos/` (GET, POST, PUT, PATCH e DELETE).
 - Os testes automatizados estão em `agendamento/tests.py`.
 
 ## Conclusão
@@ -127,3 +142,4 @@ A utilização das classes Profissional e Agendamento permite representar o núc
 | Data | Versão | Descrição |
 |---|---|---|
 | 15/10/2026 | 1.0 | Criação das classes de análise e implementação inicial |
+| 12/11/2026 | 1.1 | Atributos e diagrama alinhados a `agendamento/models.py`; validações e API REST descritas como estão no código |

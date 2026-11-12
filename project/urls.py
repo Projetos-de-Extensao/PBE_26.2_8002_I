@@ -23,8 +23,9 @@ from django.contrib.auth.views import (
     PasswordResetDoneView,
     PasswordResetView,
 )
-from django.urls import path, reverse_lazy
+from django.urls import include, path, reverse_lazy
 
+from agendamento.api import router as api_router
 from agendamento.agenda_profissional import (
     CriarBloqueioView,
     PainelProfissionalView,
@@ -58,16 +59,12 @@ from agendamento.views import (
     CancelarAgendamentoView,
     HorariosReagendamentoView,
     ReagendarAgendamentoView,
-    api_index,
-    api_schema,
-    swagger_docs,
 )
 from agendamento.admin_site import admin_site
 
 urlpatterns = [
-    path("docs/", swagger_docs, name="swagger_docs"),
-    path("api/schema/", api_schema, name="api_schema"),
-    path("api/", api_index, name="api_index"),
+    path("api/", include(api_router.urls)),
+    path("api/auth/", include("rest_framework.urls")),
     path("admin/", admin_site.urls),
     path("administracao/", AdministracaoView.as_view(), name="administracao"),
     path(

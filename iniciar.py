@@ -6,7 +6,8 @@ Uso:
 
 Use "python iniciar.py --sem-navegador" para não abrir o navegador sozinho.
 
-O script cria o ambiente virtual, instala o Django, aplica as migrações,
+O script cria o ambiente virtual, instala o Django e o Django REST framework,
+aplica as migrações,
 cria um acesso de administrador, carrega os dados de exemplo, sobe o servidor e abre o
 navegador. Funciona em Windows, macOS e Linux.
 
@@ -28,6 +29,7 @@ RAIZ = Path(__file__).resolve().parent
 VENV = RAIZ / ".venv"
 MANAGE = RAIZ / "manage.py"
 DJANGO = "Django==6.1.2"
+REST_FRAMEWORK = "djangorestframework==3.18.3"
 HOST = "127.0.0.1"
 PORTA = 8000
 PAGINA = "/"
@@ -72,15 +74,15 @@ def criar_venv():
 
 def instalar_django(python):
     tem_django = subprocess.run(
-        [str(python), "-c", "import django"],
+        [str(python), "-c", "import django, rest_framework"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
     if tem_django.returncode == 0:
         return
-    aviso("Instalando o Django")
+    aviso("Instalando o Django e o Django REST framework")
     rodar([str(python), "-m", "pip", "install", "--quiet", "--upgrade", "pip"])
-    rodar([str(python), "-m", "pip", "install", "--quiet", DJANGO])
+    rodar([str(python), "-m", "pip", "install", "--quiet", DJANGO, REST_FRAMEWORK])
 
 
 def preparar_banco(python):

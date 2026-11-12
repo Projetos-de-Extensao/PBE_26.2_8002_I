@@ -1195,126 +1195,6 @@ class PerfilProfissionalTests(TestCase):
         )
 
 
-class ApiIndexTests(TestCase):
-    def test_api_index_lista_endpoints_json(self):
-        response = self.client.get(reverse("api_index"))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response["Content-Type"], "application/json")
-        dados = response.json()
-        self.assertEqual(len(dados["endpoints"]), 3)
-        self.assertEqual(dados["endpoints"][1]["metodo"], "GET")
-        self.assertIn(
-            "/agendamentos/{pk}/horarios/",
-            dados["endpoints"][1]["caminho"],
-        )
-
-    def test_swagger_docs_abre_interface_e_aponta_para_schema(self):
-        response = self.client.get(reverse("swagger_docs"))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "SwaggerUIBundle")
-        self.assertContains(response, reverse("api_schema"))
-
-    def test_schema_openapi_descreve_endpoints_json(self):
-        response = self.client.get(reverse("api_schema"))
-
-        self.assertEqual(response.status_code, 200)
-        schema = response.json()
-        self.assertEqual(schema["openapi"], "3.0.3")
-        self.assertIn(
-            "/agendamentos/{pk}/horarios/",
-            schema["paths"],
-        )
-        self.assertIn(
-            "/agendamentos/{pk}/reagendar/",
-            schema["paths"],
-        )
-        self.assertNotIn(
-            "/agendamentos/{agendamento_id}/horarios/",
-            schema["paths"],
-        )
-        self.assertIn(
-            "sessao",
-            schema["components"]["securitySchemes"],
-        )
-        self.assertIn("/administracao/", schema["paths"])
-        self.assertIn("/profissional/agenda/", schema["paths"])
-        self.assertIn("/admin/", schema["paths"])
-        self.assertGreater(len(schema["paths"]), 40)
-        model_schemas = schema["components"]["schemas"]
-        self.assertGreaterEqual(len(model_schemas), 14)
-        self.assertIn("Agendamento", model_schemas)
-        self.assertIn("Profissional", model_schemas)
-        self.assertIn("Recorrencia", model_schemas)
-        self.assertIn("data_hora_inicio", model_schemas["Agendamento"]["properties"])
-        self.assertIn(
-            "`Profissionais`",
-            model_schemas["Profissional"]["description"],
-        )
-        self.assertIn(
-            "`Alunos (Clientes)`",
-            model_schemas["Cliente"]["description"],
-        )
-        tags = {tag["name"] for tag in schema["tags"]}
-        self.assertIn("Profissionais", tags)
-        self.assertIn("Alunos (Clientes)", tags)
-        self.assertEqual(
-            schema["paths"]["/profissional/agenda/"]["get"]["tags"],
-            ["Profissionais"],
-        )
-        self.assertEqual(
-            schema["paths"]["/minha-agenda/"]["get"]["tags"],
-            ["Alunos (Clientes)"],
-        )
-        cadastro = schema["paths"]["/cadastrar/"]["post"]
-        cadastro_schema = cadastro["requestBody"]["content"][
-            "application/x-www-form-urlencoded"
-        ]["schema"]
-        self.assertIn("nome", cadastro_schema["properties"])
-        self.assertIn("email", cadastro_schema["properties"])
-        self.assertIn("senha", cadastro_schema["properties"])
-        self.assertIn("confirmar_senha", cadastro_schema["properties"])
-        self.assertEqual(cadastro["security"], [{"csrf": []}])
-        login = schema["paths"]["/"]["post"]
-        login_schema = login["requestBody"]["content"][
-            "application/x-www-form-urlencoded"
-        ]["schema"]
-        self.assertEqual(
-            set(login_schema["required"]),
-            {"username", "password"},
-        )
-        self.assertNotIn("put", schema["paths"]["/"])
-        self.assertNotIn("put", schema["paths"]["/cadastrar/"])
-        self.assertIn(
-            "horario",
-            schema["paths"]["/agendar/{servico_id}/"]["post"]["requestBody"]
-            ["content"]["application/x-www-form-urlencoded"]["schema"]["properties"],
-        )
-        self.assertIn(
-            "duracao_minutos",
-            schema["paths"]["/administracao/servicos/novo/"]["post"]
-            ["requestBody"]["content"]["application/x-www-form-urlencoded"]
-            ["schema"]["properties"],
-        )
-        for path, path_item in schema["paths"].items():
-            if path.startswith("/admin/"):
-                continue
-            for method, operation in path_item.items():
-                if method == "post":
-                    self.assertTrue(
-                        "requestBody" in operation
-                        or operation.get("x-no-request-body"),
-                        f"POST {path} is missing a request-body description",
-                    )
-        operation_ids = [
-            operation["operationId"]
-            for path_item in schema["paths"].values()
-            for operation in path_item.values()
-        ]
-        self.assertEqual(len(operation_ids), len(set(operation_ids)))
-
-
 class NovoAgendamentoViewTests(TestCase):
     def setUp(self):
         papel_profissional = Papel.objects.create(nome="Profissional")
@@ -3332,3 +3212,409 @@ class PreviaRecorrenciaViewTests(_BaseRecorrencia):
             "data_termino": timezone.localtime(horario).date().isoformat(),
         })
         self.assertEqual(response.status_code, 403)
+
+
+class ApiRestTests(TestCase):
+    """API REST em /api/: CRUD de todos os models, restrito a administradores."""
+
+    def setUp(self):
+        self.admin = Usuario.objects.create_superuser(
+            email="admin@exemplo.com",
+            password="Senha#Forte123",
+            nome="Administrador",
+        )
+        self.cliente = Cliente.objects.create_user(
+            email="cliente@exemplo.com",
+            password="Senha#Forte123",
+            nome="Cliente",
+        )
+        self.profissional = Profissional.objects.create_user(
+            email="profissional@exemplo.com",
+            password="Senha#Forte123",
+            nome="Profissional",
+            especialidade="Fisioterapia",
+        )
+        self.servico = Servico.objects.create(
+            profissional=self.profissional,
+            nome="Sessão",
+            tipo="Fisioterapia",
+            duracao_minutos=60,
+        )
+        # Próxima segunda-feira (pelo menos uma semana à frente), às 9h.
+        hoje = timezone.localdate()
+        self.segunda = hoje + timedelta(days=7 + (0 - hoje.weekday()) % 7)
+        Disponibilidade.objects.create(
+            profissional=self.profissional,
+            dia_semana=0,
+            hora_inicio=time(8),
+            hora_fim=time(18),
+        )
+        self.client.force_login(self.admin)
+
+    def horario(self, hora, data=None):
+        return timezone.make_aware(datetime.combine(data or self.segunda, time(hora)))
+
+    def url(self, nome, pk=None):
+        if pk is None:
+            return reverse(f"{nome}-list")
+        return reverse(f"{nome}-detail", args=[pk])
+
+    def test_raiz_lista_todos_os_models(self):
+        resposta = self.client.get("/api/")
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(
+            set(resposta.json()),
+            {
+                "papeis", "permissoes", "usuarios", "perfis", "clientes",
+                "profissionais", "recepcionistas", "administradores", "servicos",
+                "disponibilidades", "bloqueios", "salas", "recursos",
+                "recorrencias", "agendamentos",
+            },
+        )
+
+    def test_todas_as_listagens_respondem(self):
+        for nome in self.client.get("/api/").json():
+            with self.subTest(endpoint=nome):
+                self.assertEqual(self.client.get(f"/api/{nome}/").status_code, 200)
+
+    def test_pagina_navegavel_abre_no_navegador(self):
+        resposta = self.client.get("/api/salas/", HTTP_ACCEPT="text/html")
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Sala List")
+
+    def test_exige_login(self):
+        self.client.logout()
+        self.assertIn(self.client.get("/api/salas/").status_code, (401, 403))
+
+    def test_bloqueia_quem_nao_e_administrador(self):
+        self.client.force_login(self.cliente)
+        self.assertEqual(self.client.get("/api/salas/").status_code, 403)
+        self.assertEqual(
+            self.client.post("/api/salas/", {"nome": "X", "capacidade": 1}).status_code,
+            403,
+        )
+
+    def test_crud_completo_de_sala(self):
+        criada = self.client.post(
+            self.url("sala"), {"nome": "Sala 1", "capacidade": 2}, content_type="application/json"
+        )
+        self.assertEqual(criada.status_code, 201)
+        pk = criada.json()["id"]
+
+        self.assertEqual(self.client.get(self.url("sala", pk)).json()["nome"], "Sala 1")
+
+        editada = self.client.put(
+            self.url("sala", pk),
+            {"nome": "Sala Azul", "capacidade": 4},
+            content_type="application/json",
+        )
+        self.assertEqual(editada.status_code, 200)
+        self.assertEqual(Sala.objects.get(pk=pk).nome, "Sala Azul")
+
+        parcial = self.client.patch(
+            self.url("sala", pk), {"capacidade": 5}, content_type="application/json"
+        )
+        self.assertEqual(parcial.json()["capacidade"], 5)
+
+        self.assertEqual(self.client.delete(self.url("sala", pk)).status_code, 204)
+        self.assertFalse(Sala.objects.filter(pk=pk).exists())
+
+    def test_validacao_do_model_vira_400(self):
+        resposta = self.client.post(
+            self.url("sala"), {"nome": "Sala 0", "capacidade": 0}, content_type="application/json"
+        )
+        self.assertEqual(resposta.status_code, 400)
+        self.assertIn("capacidade", resposta.json())
+
+    def test_cria_cliente_com_senha_e_perfil(self):
+        resposta = self.client.post(
+            self.url("cliente"),
+            {"email": "novo@exemplo.com", "nome": "Novo", "password": "Senha#Forte123"},
+            content_type="application/json",
+        )
+        self.assertEqual(resposta.status_code, 201)
+        self.assertNotIn("password", resposta.json())
+        self.assertEqual(resposta.json()["papel"], "cliente")
+        novo = Cliente.objects.get(email="novo@exemplo.com")
+        self.assertTrue(novo.check_password("Senha#Forte123"))
+
+    def test_criar_usuario_exige_senha(self):
+        resposta = self.client.post(
+            self.url("cliente"),
+            {"email": "novo@exemplo.com", "nome": "Novo"},
+            content_type="application/json",
+        )
+        self.assertEqual(resposta.status_code, 400)
+        self.assertIn("password", resposta.json())
+
+    def test_put_de_usuario_sem_senha_mantem_a_senha(self):
+        resposta = self.client.put(
+            self.url("profissional", self.profissional.pk),
+            {
+                "email": "profissional@exemplo.com",
+                "nome": "Ana Fisio",
+                "especialidade": "Fisioterapia esportiva",
+                "modalidade": "online",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(resposta.status_code, 200)
+        self.profissional.refresh_from_db()
+        self.assertEqual(self.profissional.nome, "Ana Fisio")
+        self.assertTrue(self.profissional.check_password("Senha#Forte123"))
+
+    def test_cria_administrador_com_acesso_ao_painel(self):
+        resposta = self.client.post(
+            self.url("administrador"),
+            {"email": "adm2@exemplo.com", "nome": "Adm 2", "password": "Senha#Forte123"},
+            content_type="application/json",
+        )
+        self.assertEqual(resposta.status_code, 201)
+        self.assertEqual(resposta.json()["papel"], "administrador")
+        self.assertTrue(Usuario.objects.get(email="adm2@exemplo.com").is_staff)
+
+    def test_crud_de_agendamento_com_regras_de_negocio(self):
+        criado = self.client.post(
+            self.url("agendamento"),
+            {
+                "cliente": self.cliente.pk,
+                "profissional": self.profissional.pk,
+                "servico": self.servico.pk,
+                "data_hora_inicio": self.horario(9).isoformat(),
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(criado.status_code, 201, criado.content)
+        pk = criado.json()["id"]
+        # RN07: término calculado pela duração do serviço.
+        self.assertEqual(Agendamento.objects.get(pk=pk).data_hora_fim, self.horario(10))
+
+        # RN05: fora da disponibilidade é recusado.
+        fora = self.client.put(
+            self.url("agendamento", pk),
+            {
+                "cliente": self.cliente.pk,
+                "profissional": self.profissional.pk,
+                "servico": self.servico.pk,
+                "data_hora_inicio": self.horario(19).isoformat(),
+                "data_hora_fim": self.horario(20).isoformat(),
+                "status": "agendado",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(fora.status_code, 400)
+        self.assertIn(Agendamento.MSG_FORA_DISPONIBILIDADE, str(fora.json()))
+
+        confirmado = self.client.patch(
+            self.url("agendamento", pk), {"status": "confirmado"}, content_type="application/json"
+        )
+        self.assertEqual(confirmado.status_code, 200, confirmado.content)
+        self.assertEqual(Agendamento.objects.get(pk=pk).status, "confirmado")
+
+        self.assertEqual(self.client.delete(self.url("agendamento", pk)).status_code, 204)
+
+    def test_agendamento_em_conflito_e_recusado(self):
+        Agendamento.objects.create(
+            cliente=self.cliente,
+            profissional=self.profissional,
+            servico=self.servico,
+            data_hora_inicio=self.horario(9),
+            data_hora_fim=self.horario(10),
+        )
+        resposta = self.client.post(
+            self.url("agendamento"),
+            {
+                "cliente": self.cliente.pk,
+                "profissional": self.profissional.pk,
+                "servico": self.servico.pk,
+                "data_hora_inicio": self.horario(9).isoformat(),
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(resposta.status_code, 400)
+        self.assertIn(Agendamento.MSG_PROFISSIONAL_OCUPADO, str(resposta.json()))
+
+    def test_recurso_exclusivo_ocupado_e_recusado(self):
+        maca = Recurso.objects.create(nome="Maca", exclusivo=True)
+        outro = Profissional.objects.create_user(
+            email="outro@exemplo.com", password="Senha#Forte123", nome="Outro",
+            especialidade="Pilates",
+        )
+        Disponibilidade.objects.create(
+            profissional=outro, dia_semana=0, hora_inicio=time(8), hora_fim=time(18)
+        )
+        servico_outro = Servico.objects.create(
+            profissional=outro, nome="Pilates", tipo="Pilates", duracao_minutos=60
+        )
+        existente = Agendamento.objects.create(
+            cliente=self.cliente,
+            profissional=self.profissional,
+            servico=self.servico,
+            data_hora_inicio=self.horario(9),
+            data_hora_fim=self.horario(10),
+        )
+        existente.recursos.add(maca)
+        segundo_cliente = Cliente.objects.create_user(
+            email="c2@exemplo.com", password="Senha#Forte123", nome="C2"
+        )
+        resposta = self.client.post(
+            self.url("agendamento"),
+            {
+                "cliente": segundo_cliente.pk,
+                "profissional": outro.pk,
+                "servico": servico_outro.pk,
+                "recursos": [maca.pk],
+                "data_hora_inicio": self.horario(9).isoformat(),
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(resposta.status_code, 400)
+        self.assertIn("recursos", resposta.json())
+
+    def test_servico_de_outro_profissional_e_recusado(self):
+        outro = Profissional.objects.create_user(
+            email="outro@exemplo.com", password="Senha#Forte123", nome="Outro",
+            especialidade="Pilates",
+        )
+        resposta = self.client.post(
+            self.url("agendamento"),
+            {
+                "cliente": self.cliente.pk,
+                "profissional": outro.pk,
+                "servico": self.servico.pk,
+                "data_hora_inicio": self.horario(9).isoformat(),
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(resposta.status_code, 400)
+        self.assertIn("servico", resposta.json())
+
+    def test_excluir_registro_em_uso_responde_409(self):
+        resposta = self.client.delete(self.url("profissional", self.profissional.pk))
+        self.assertEqual(resposta.status_code, 409)
+        self.assertIn("servicos", resposta.json()["detail"])
+        self.assertTrue(Profissional.objects.filter(pk=self.profissional.pk).exists())
+
+    def test_bloqueio_lista_agendamentos_afetados(self):
+        agendamento = Agendamento.objects.create(
+            cliente=self.cliente,
+            profissional=self.profissional,
+            servico=self.servico,
+            data_hora_inicio=self.horario(9),
+            data_hora_fim=self.horario(10),
+        )
+        resposta = self.client.post(
+            self.url("bloqueio"),
+            {
+                "profissional": self.profissional.pk,
+                "inicio": self.horario(8).isoformat(),
+                "fim": self.horario(12).isoformat(),
+                "motivo": "Curso",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(resposta.status_code, 201)
+        self.assertEqual(resposta.json()["agendamentos_afetados"], [agendamento.pk])
+
+    def test_bloqueio_com_fim_antes_do_inicio_e_recusado(self):
+        resposta = self.client.post(
+            self.url("bloqueio"),
+            {
+                "profissional": self.profissional.pk,
+                "inicio": self.horario(12).isoformat(),
+                "fim": self.horario(8).isoformat(),
+                "motivo": "Erro",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(resposta.status_code, 400)
+        self.assertIn("fim", resposta.json())
+
+    def test_disponibilidade_put_e_delete(self):
+        faixa = Disponibilidade.objects.create(
+            profissional=self.profissional, dia_semana=2, hora_inicio=time(8), hora_fim=time(12)
+        )
+        resposta = self.client.put(
+            self.url("disponibilidade", faixa.pk),
+            {
+                "profissional": self.profissional.pk,
+                "dia_semana": 2,
+                "hora_inicio": "13:00",
+                "hora_fim": "17:00",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta.json()["dia_semana_nome"], "Quarta-feira")
+        self.assertEqual(
+            self.client.delete(self.url("disponibilidade", faixa.pk)).status_code, 204
+        )
+
+    def test_recorrencia_gera_e_cancela_ocorrencias(self):
+        criada = self.client.post(
+            self.url("recorrencia"),
+            {
+                "cliente": self.cliente.pk,
+                "profissional": self.profissional.pk,
+                "servico": self.servico.pk,
+                "dias_semana": [0],
+                "data_inicio": self.segunda.isoformat(),
+                "hora_inicio": "09:00",
+                "data_termino": (self.segunda + timedelta(days=14)).isoformat(),
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(criada.status_code, 201, criada.content)
+        pk = criada.json()["id"]
+
+        geradas = self.client.post(f"/api/recorrencias/{pk}/gerar-ocorrencias/")
+        self.assertEqual(geradas.status_code, 201)
+        self.assertEqual(len(geradas.json()["agendamentos_criados"]), 3)
+
+        canceladas = self.client.post(f"/api/recorrencias/{pk}/cancelar/")
+        self.assertEqual(canceladas.json()["sessoes_canceladas"], 3)
+
+    def test_recorrencia_sem_dias_e_recusada(self):
+        resposta = self.client.post(
+            self.url("recorrencia"),
+            {
+                "cliente": self.cliente.pk,
+                "profissional": self.profissional.pk,
+                "servico": self.servico.pk,
+                "dias_semana": [],
+                "data_inicio": self.segunda.isoformat(),
+                "hora_inicio": "09:00",
+                "data_termino": self.segunda.isoformat(),
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(resposta.status_code, 400)
+        self.assertIn("dias_semana", resposta.json())
+
+    def test_papel_com_permissoes(self):
+        permissao = self.client.post(
+            self.url("permissao"), {"nome": "agendar"}, content_type="application/json"
+        ).json()
+        papel = self.client.post(
+            self.url("papel"),
+            {"nome": "Cliente", "permissoes": [permissao["id"]]},
+            content_type="application/json",
+        )
+        self.assertEqual(papel.status_code, 201)
+        self.assertEqual(papel.json()["permissoes"], [permissao["id"]])
+
+    def test_perfil_muda_papel_e_nao_tem_delete(self):
+        perfil = self.cliente.perfil
+        resposta = self.client.patch(
+            self.url("perfil", perfil.pk), {"papel": "recepcionista"}, content_type="application/json"
+        )
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(self.client.delete(self.url("perfil", perfil.pk)).status_code, 405)
+
+    def test_usuario_generico_nao_tem_post(self):
+        resposta = self.client.post(
+            self.url("usuario"),
+            {"email": "x@exemplo.com", "nome": "X", "password": "Senha#Forte123"},
+            content_type="application/json",
+        )
+        self.assertEqual(resposta.status_code, 405)

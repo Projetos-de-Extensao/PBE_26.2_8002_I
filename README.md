@@ -25,23 +25,56 @@ Pré-requisito: Python 3.11 ou mais novo.
 python iniciar.py
 ```
 
-O script cria o ambiente virtual, instala o Django, prepara o banco, carrega os
+O script cria o ambiente virtual, instala o Django e o Django REST framework,
+prepara o banco, carrega os
 dados de exemplo, cria o acesso de demonstração, sobe o servidor e abre o
 navegador. Funciona em Windows, macOS e Linux. Para parar, `Ctrl+C`.
 
 Para não abrir o navegador automaticamente: `python iniciar.py --sem-navegador`.
 
-Com o servidor ligado, abra `http://127.0.0.1:8000/docs/` para explorar as rotas
-do sistema no Swagger UI. O schema OpenAPI inclui as rotas registradas e os
-schemas de todos os modelos do app. Ele fica disponível em
-`http://127.0.0.1:8000/api/schema/`.
+### API REST
+
+Com o servidor ligado, a API fica em `http://127.0.0.1:8000/api/`. Abrindo esse
+endereço no navegador, o Django REST framework mostra uma página navegável com
+todos os endpoints; em cada um dá para listar, criar, editar e excluir pelos
+formulários da própria página.
+
+| Endpoint | Model |
+| --- | --- |
+| `/api/clientes/` | `Cliente` |
+| `/api/profissionais/` | `Profissional` |
+| `/api/recepcionistas/` | `Recepcionista` |
+| `/api/administradores/` | `Administrador` (o superusuário criado pelo `iniciar.py` é um `Usuario` com papel administrador e aparece em `/api/usuarios/`) |
+| `/api/usuarios/` | `Usuario` (todos os tipos; sem POST, crie pelo endpoint do tipo) |
+| `/api/perfis/` | `Perfil` (papel de cada usuário; sem DELETE) |
+| `/api/papeis/` | `Papel` |
+| `/api/permissoes/` | `Permissao` |
+| `/api/servicos/` | `Servico` |
+| `/api/disponibilidades/` | `Disponibilidade` |
+| `/api/bloqueios/` | `Bloqueio` |
+| `/api/salas/` | `Sala` |
+| `/api/recursos/` | `Recurso` |
+| `/api/recorrencias/` | `Recorrencia` |
+| `/api/agendamentos/` | `Agendamento` |
+
+- `GET` e `POST` em `/api/<endpoint>/`; `GET`, `PUT`, `PATCH` e `DELETE` em
+  `/api/<endpoint>/<id>/`.
+- `POST /api/recorrencias/<id>/gerar-ocorrencias/` cria os agendamentos da série
+  e `POST /api/recorrencias/<id>/cancelar/` cancela as sessões futuras.
+- Só administradores acessam. Entre com `admin@demo.local` (pelo login do site
+  ou pelo link "Log in" da própria página da API). Fora do navegador, use
+  autenticação básica, por exemplo
+  `curl -u admin@demo.local:admin http://127.0.0.1:8000/api/salas/`.
+- A API aplica as mesmas regras das telas (conflitos, disponibilidade,
+  bloqueios). Dados inválidos voltam com `400` e a mensagem; excluir um registro
+  em uso (por exemplo, um profissional com agendamentos) volta com `409`.
 
 ### Passo a passo, se preferir
 
 ```bash
 python -m venv .venv
 .venv\Scripts\Activate.ps1   # Windows; no macOS e Linux: source .venv/bin/activate
-pip install Django==6.1.2
+pip install -r requirements.txt
 python manage.py migrate
 python manage.py criar_dados_exemplo
 python manage.py runserver

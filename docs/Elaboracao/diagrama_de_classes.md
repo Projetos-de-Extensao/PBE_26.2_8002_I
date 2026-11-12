@@ -41,7 +41,7 @@ Representar os conceitos do domínio de agendamento multidisciplinar, suas respo
 **Usuario**
 - Descrição: qualquer pessoa que acessa a plataforma, autenticada por e-mail e senha.
 - Atributos de domínio: nome, e-mail, senha, papel de acesso.
-- Relacionamentos: um Usuario possui 1 Papel.
+- Relacionamentos: um Usuario possui 1 Perfil, que guarda o seu papel de acesso (cliente, profissional, recepcionista ou administrador).
 - Restrições de negócio: RN08, RN09, RF19 — o papel do usuário determina o que ele pode visualizar ou alterar.
 
 **Cliente** (especialização de Usuario)
@@ -53,7 +53,7 @@ Representar os conceitos do domínio de agendamento multidisciplinar, suas respo
 **Profissional** (especialização de Usuario)
 - Descrição: personal trainer, nutricionista, fisioterapeuta ou outro profissional que oferece serviços.
 - Atributos de domínio: especialidade, formação/apresentação.
-- Relacionamentos: um Profissional oferece 1 a N Serviços; define 0 a N Disponibilidades; registra 0 a N Bloqueios; atende 0 a N Agendamentos.
+- Relacionamentos: um Profissional oferece 0 a N Serviços; define 0 a N Disponibilidades; registra 0 a N Bloqueios; atende 0 a N Agendamentos.
 - Restrições de negócio: RN01 — um profissional não pode ter dois atendimentos simultâneos; RN13 — bloqueios tornam o intervalo indisponível.
 
 **Recepcionista** (especialização de Usuario)
@@ -110,7 +110,7 @@ Representar os conceitos do domínio de agendamento multidisciplinar, suas respo
 
 **Papel** e **Permissao**
 - Descrição: definem o que cada tipo de usuário pode fazer no sistema.
-- Relacionamentos: um Papel concede 0 a N Permissões; um Usuario possui 1 Papel.
+- Relacionamentos: um Papel concede 0 a N Permissões. No código, o papel de cada usuário é o campo `Perfil.papel`; os models `Papel` e `Permissao` existem (com CRUD em `/api/papeis/` e `/api/permissoes/`), mas ainda não são ligados ao usuário nem consultados pelas telas — as permissões estão no código das views, descritas em [Papéis e Permissões](./papeis-e-permissoes.md).
 - Restrições de negócio: RN08, RN09, RF19.
 
 ### 1.4 Rastreabilidade
@@ -164,8 +164,9 @@ Refinar o modelo conceitual acima para uma estrutura orientada à implementaçã
 
 ### 3.1 Conteúdo mínimo
 
-- Classes de domínio: `Usuario`, `Cliente`, `Profissional`, `Recepcionista`, `Administrador`, `Servico`, `Disponibilidade`, `Bloqueio`, `Agendamento`, `Recorrencia`, `Sala`, `Recurso`, `Papel`, `Permissao`.
-- Enumeração de apoio: `StatusAgendamento`.
+- Classes de domínio: `Usuario`, `Perfil`, `Cliente`, `Profissional`, `Recepcionista`, `Administrador`, `Servico`, `Disponibilidade`, `Bloqueio`, `Agendamento`, `Recorrencia`, `Sala`, `Recurso`, `Papel`, `Permissao`.
+- Enumerações de apoio: `StatusAgendamento`, `PapelUsuario` e `Modalidade`.
+- O diagrama abaixo usa os mesmos nomes de atributos e métodos de `agendamento/models.py`.
 - Associações, generalizações e multiplicidades derivadas da seção 1.
 - Operações alinhadas aos fluxos dos casos de uso UC01 a UC05.
 
@@ -173,137 +174,152 @@ Refinar o modelo conceitual acima para uma estrutura orientada à implementaçã
 @startuml AgendamentoMultidisciplinar_ClassesEspecificacao
 
 class Usuario <<entity>> {
-  - id: Long
+  - id: int
+  - email: String {único, usado no login}
   - nome: String
-  - email: String
-  - senhaHash: String
-  + autenticar(email: String, senha: String): boolean
-  + recuperarSenha(email: String): void
-  + atualizarDados(dados: UsuarioDTO): void
+  - telefone: String
+  - password: String {hash}
+  - is_active: boolean
+  - is_staff: boolean
 }
 
-class Cliente <<entity>> {
-  + pesquisarProfissionais(filtro: FiltroBusca): List<Profissional>
-  + solicitarAgendamento(servico: Servico, profissional: Profissional, horario: DateTime): Agendamento
-  + visualizarAgenda(): List<Agendamento>
+class Perfil <<entity>> {
+  - id: int
+  - papel: PapelUsuario
 }
+
+enum PapelUsuario {
+  cliente
+  profissional
+  recepcionista
+  administrador
+}
+
+class Cliente <<entity>>
 
 class Profissional <<entity>> {
   - especialidade: String
-  - formacao: String
-  + definirDisponibilidade(intervalo: Intervalo): Disponibilidade
-  + bloquearHorario(intervalo: Intervalo, motivo: String): Bloqueio
-  + visualizarAgenda(): List<Agendamento>
+  - modalidade: Modalidade
+  - formacao: Text
+  - apresentacao: Text
 }
 
-class Recepcionista <<entity>> {
-  + criarAgendamento(cliente: Cliente, dados: AgendamentoDTO): Agendamento
-  + reagendar(agendamento: Agendamento, novoHorario: DateTime): void
-  + cancelar(agendamento: Agendamento): void
+enum Modalidade {
+  presencial
+  online
+  hibrido
 }
 
-class Administrador <<entity>> {
-  + cadastrarProfissional(profissional: Profissional): void
-  + cadastrarServico(servico: Servico): void
-  + cadastrarSala(sala: Sala): void
-  + cadastrarRecurso(recurso: Recurso): void
-  + definirPermissoes(usuario: Usuario, papel: Papel): void
-  + consultarInformacoesOperacionais(): RelatorioOperacional
-}
+class Recepcionista <<entity>>
+
+class Administrador <<entity>>
 
 class Papel <<entity>> {
-  - id: Long
-  - nome: String
+  - id: int
+  - nome: String {único}
 }
 
 class Permissao <<entity>> {
-  - id: Long
-  - nome: String
-  - descricao: String
+  - id: int
+  - nome: String {único}
+  - descricao: Text
 }
 
 class Servico <<entity>> {
-  - id: Long
+  - id: int
   - nome: String
   - tipo: String
-  - duracaoMinutos: int
-  + calcularHorarioFim(inicio: DateTime): DateTime
+  - duracao_minutos: int {>= 1}
+  + calcular_horario_fim(inicio: DateTime): DateTime
 }
 
 class Disponibilidade <<entity>> {
-  - id: Long
-  - diaSemana: String
-  - horaInicio: Time
-  - horaFim: Time
-  + estaDisponivel(horario: DateTime): boolean
+  - id: int
+  - dia_semana: int {0 = segunda ... 6 = domingo}
+  - hora_inicio: Time
+  - hora_fim: Time
+  + esta_disponivel(horario: DateTime): boolean
 }
 
 class Bloqueio <<entity>> {
-  - id: Long
+  - id: int
   - inicio: DateTime
   - fim: DateTime
   - motivo: String
+  + agendamentos_afetados(): QuerySet<Agendamento>
 }
 
 class Agendamento <<entity>> {
-  - id: Long
-  - dataHoraInicio: DateTime
-  - dataHoraFim: DateTime
+  - id: int
+  - data_hora_inicio: DateTime
+  - data_hora_fim: DateTime
   - status: StatusAgendamento
-  + verificarConflito(): boolean
-  + confirmar(): void
-  + cancelar(): void
-  + reagendar(novoHorario: DateTime): void
+  + motivos_conflito(recursos): List<String>
+  + conflitos_de_recursos(recursos): List<String>
+  + verificar_conflito(): boolean
+  + clean(): void
 }
 
 enum StatusAgendamento {
-  AGENDADO
-  CONFIRMADO
-  CANCELADO
-  CONCLUIDO
+  agendado
+  confirmado
+  cancelado
+  concluido
 }
 
 class Recorrencia <<entity>> {
-  - id: Long
-  - padrao: String
-  - dataTermino: Date
-  + gerarOcorrencias(): List<Agendamento>
+  - id: int
+  - padrao: String = "Semanal"
+  - dias_semana: List<int>
+  - data_inicio: Date
+  - hora_inicio: Time
+  - data_termino: Date
+  + datas_do_periodo(): List<Date>
+  + avaliar_ocorrencias(recursos): (validas, conflitos)
+  + gerar_ocorrencias(recursos, salvar): (validas, conflitos)
+  + cancelar(): int
 }
 
 class Sala <<entity>> {
-  - id: Long
-  - nome: String
-  - capacidade: int
+  - id: int
+  - nome: String {único}
+  - capacidade: int {>= 1}
 }
 
 class Recurso <<entity>> {
-  - id: Long
-  - nome: String
+  - id: int
+  - nome: String {único}
   - exclusivo: boolean
 }
 
-' Generalizações
+' Generalizações (herança multi-tabela do Django)
 Usuario <|-- Cliente
 Usuario <|-- Profissional
 Usuario <|-- Recepcionista
 Usuario <|-- Administrador
 
-' Papel e permissões
-Usuario "1" --> "1" Papel : possui
-Papel "1" --> "0..*" Permissao : concede
+' Papel de acesso
+Usuario "1" -- "1" Perfil : possui
+Perfil --> PapelUsuario
+Papel "0..*" --> "0..*" Permissao : concede
+Profissional --> Modalidade
 
 ' Associações de domínio
 Cliente "1" --> "0..*" Agendamento : realiza
-Profissional "1" --> "1..*" Servico : oferece
+Profissional "1" --> "0..*" Servico : oferece
 Profissional "1" --> "0..*" Disponibilidade : define
 Profissional "1" --> "0..*" Bloqueio : registra
 Profissional "1" --> "0..*" Agendamento : atende
-Recepcionista "1" --> "0..*" Agendamento : opera
+Recepcionista "0..1" --> "0..*" Agendamento : opera
 Servico "1" --> "0..*" Agendamento : é utilizado em
 Agendamento "0..*" --> "0..1" Sala : reserva
 Agendamento "0..*" --> "0..*" Recurso : reserva
-Agendamento "0..1" --> "0..1" Recorrencia : pertence a
-Recorrencia "1" --> "1..*" Agendamento : gera
+Recorrencia "0..1" --> "0..*" Agendamento : gera
+Cliente "1" --> "0..*" Recorrencia : solicita
+Profissional "1" --> "0..*" Recorrencia : atende
+Servico "1" --> "0..*" Recorrencia : é repetido em
+Recorrencia "0..*" --> "0..1" Sala : reserva
+Recorrencia "0..*" --> "0..*" Recurso : reserva
 Agendamento --> StatusAgendamento : possui
 
 @enduml
@@ -314,6 +330,7 @@ Agendamento --> StatusAgendamento : possui
 | Classe de Especificação | Origem Conceitual | Requisito(s) | Caso(s) de Uso |
 |---|---|---|---|
 | Usuario | Usuario | RF01, RF02, RF03 | UC01 |
+| Perfil | Usuario (papel de acesso) | RF19 | UC01, UC05 |
 | Cliente | Cliente | RF08, RF09, RF10, RF11, RF12 | UC02, UC04 |
 | Profissional | Profissional | RF04, RF07, RF20 | UC03 |
 | Recepcionista | Recepcionista | RF25 | UC04 |
@@ -330,7 +347,7 @@ Agendamento --> StatusAgendamento : possui
 ### 3.3 Critérios de qualidade
 
 - Cobertura dos requisitos funcionais: todos os RF de RF01 a RF26, exceto os de evolução (RF21, RF22), estão representados por ao menos uma classe ou operação.
-- Coesão alta e acoplamento controlado: cada classe concentra atributos e comportamentos de um único conceito de domínio; a validação de conflito fica centralizada em `Agendamento.verificarConflito()`.
+- Coesão alta e acoplamento controlado: cada classe concentra atributos e comportamentos de um único conceito de domínio; a validação de conflito fica centralizada em `Agendamento.motivos_conflito()` (usada por `clean()` e por `verificar_conflito()`).
 - Nomes consistentes com o domínio (Cliente, Profissional, Servico, Agendamento, Sala, Recurso), sem termos técnicos de infraestrutura.
 - Ausência de classes sem responsabilidade clara: `Papel`/`Permissao` existem para sustentar RF19 e as regras RN08/RN09.
 
@@ -339,6 +356,7 @@ Agendamento --> StatusAgendamento : possui
 | Versão | Data | Autor(es) | Revisor(es) | Resumo da alteração |
 |---|---|---|---|---|
 | v0.1 | 17/09/2026 | Equipe do projeto | — | Criação do diagrama de classes conceitual e de especificação a partir do roteiro e dos casos de uso |
+| v0.2 | 12/11/2026 | Miguel Esteves | — | Diagrama de especificação alinhado a `agendamento/models.py`: inclusão de `Perfil`, atributos reais de `Profissional`, `Disponibilidade`, `Recorrencia` e `Agendamento`, e métodos que existem no código |
 
 ## 5) Entregáveis
 
@@ -370,3 +388,4 @@ O modelo conceitual e o modelo de especificação apresentados cobrem todas as e
 | Data | Versão | Descrição | Autor(es) |
 |---|---|---|---|
 | 17/09/2026 | 1.0 | Criação do diagrama de classes conceitual e de especificação a partir do roteiro | Equipe do projeto |
+| 12/11/2026 | 1.1 | Diagrama de especificação alinhado ao código | Miguel Esteves |

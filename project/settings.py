@@ -83,6 +83,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "rest_framework",
     "agendamento.apps.AgendamentoConfig",
 ]
 
@@ -116,6 +117,16 @@ TEMPLATES = [
 WSGI_APPLICATION = "project.wsgi.application"
 
 AUTH_USER_MODEL = "agendamento.Usuario"
+
+# API REST em /api/ (Django REST Framework). A sessão é a mesma do site; a
+# autenticação básica permite testar com curl/Postman.
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+        "rest_framework.authentication.BasicAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": ["agendamento.permissoes_api.EhAdministrador"],
+}
 LOGIN_URL = "/"
 LOGIN_REDIRECT_URL = "/"
 
