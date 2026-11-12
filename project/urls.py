@@ -24,6 +24,8 @@ from django.contrib.auth.views import (
     PasswordResetView,
 )
 from django.urls import include, path, reverse_lazy
+from django.views.generic import RedirectView
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 from agendamento.api import router as api_router
 from agendamento.agenda_profissional import (
@@ -63,6 +65,13 @@ from agendamento.views import (
 from agendamento.admin_site import admin_site
 
 urlpatterns = [
+    path(
+        "api/",
+        SpectacularSwaggerView.as_view(url_name="api_schema"),
+        name="swagger",
+    ),
+    path("api/schema/", SpectacularAPIView.as_view(), name="api_schema"),
+    path("docs/", RedirectView.as_view(pattern_name="swagger")),
     path("api/", include(api_router.urls)),
     path("api/auth/", include("rest_framework.urls")),
     path("admin/", admin_site.urls),

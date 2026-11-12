@@ -1,5 +1,6 @@
 from datetime import datetime, time, timedelta
 from io import StringIO
+import json
 import re
 
 from django.core import mail
@@ -3259,21 +3260,44 @@ class ApiRestTests(TestCase):
             return reverse(f"{nome}-list")
         return reverse(f"{nome}-detail", args=[pk])
 
-    def test_raiz_lista_todos_os_models(self):
+    ENDPOINTS = [
+        "papeis", "permissoes", "usuarios", "perfis", "clientes",
+        "profissionais", "recepcionistas", "administradores", "servicos",
+        "disponibilidades", "bloqueios", "salas", "recursos",
+        "recorrencias", "agendamentos",
+    ]
+
+    def test_swagger_abre_em_api(self):
         resposta = self.client.get("/api/")
         self.assertEqual(resposta.status_code, 200)
-        self.assertEqual(
-            set(resposta.json()),
-            {
-                "papeis", "permissoes", "usuarios", "perfis", "clientes",
-                "profissionais", "recepcionistas", "administradores", "servicos",
-                "disponibilidades", "bloqueios", "salas", "recursos",
-                "recorrencias", "agendamentos",
-            },
-        )
+        self.assertContains(resposta, "SwaggerUIBundle")
+        self.assertContains(resposta, reverse("api_schema"))
+
+    def test_docs_redireciona_para_o_swagger(self):
+        self.assertRedirects(self.client.get("/docs/"), "/api/")
+
+    def test_swagger_abre_sem_login(self):
+        self.client.logout()
+        self.assertEqual(self.client.get("/api/").status_code, 200)
+        self.assertEqual(self.client.get(reverse("api_schema")).status_code, 200)
+
+    def test_schema_tem_crud_de_todos_os_models(self):
+        resposta = self.client.get(reverse("api_schema"), HTTP_ACCEPT="application/json")
+        self.assertEqual(resposta.status_code, 200)
+        caminhos = json.loads(resposta.content)["paths"]
+        for nome in self.ENDPOINTS:
+            with self.subTest(endpoint=nome):
+                self.assertIn("get", caminhos[f"/api/{nome}/"])
+                detalhe = caminhos[f"/api/{nome}/{{id}}/"]
+                self.assertIn("put", detalhe)
+                self.assertIn("patch", detalhe)
+                if nome != "perfis":
+                    self.assertIn("delete", detalhe)
+                if nome != "usuarios":
+                    self.assertIn("post", caminhos[f"/api/{nome}/"])
 
     def test_todas_as_listagens_respondem(self):
-        for nome in self.client.get("/api/").json():
+        for nome in self.ENDPOINTS:
             with self.subTest(endpoint=nome):
                 self.assertEqual(self.client.get(f"/api/{nome}/").status_code, 200)
 

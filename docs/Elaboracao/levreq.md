@@ -217,8 +217,8 @@ autorização ou operação por responsável legal para menores de idade nesta
 entrega. O administrador mencionado nos casos de uso é o administrador do
 estabelecimento e não substitui um responsável legal.
 
-> Além das telas, todos os models têm CRUD na API REST em `/api/`, restrita a
-> administradores e sujeita às mesmas regras de negócio (ver
+> Além das telas, todos os models têm CRUD na API REST, documentada no Swagger
+> em `/api/`, restrita a administradores e sujeita às mesmas regras de negócio (ver
 > [Ambiente e Implantação](../Construcao/ambiente_e_implantacao.md#api-rest)).
 
 ## 5. Diagrama de Casos de Uso

@@ -88,3 +88,5 @@ wcwidth==0.6.0
 webencodings==0.5.1
 Django==6.1.2
 djangorestframework==3.18.3
+drf-spectacular==0.30.0
+drf-spectacular-sidecar==2026.10.1

@@ -190,7 +190,7 @@ class BloqueioSerializer(RegrasDoModeloMixin, serializers.ModelSerializer):
             "agendamentos_afetados",
         ]
 
-    def get_agendamentos_afetados(self, bloqueio):
+    def get_agendamentos_afetados(self, bloqueio) -> list[int]:
         return [agendamento.pk for agendamento in bloqueio.agendamentos_afetados()]
 
 

@@ -24,10 +24,13 @@ O passo a passo manual está no `README.md` do repositório.
 
 ## API REST
 
-A API é feita com o Django REST framework (`djangorestframework` em
-`requirements.txt`) e fica em `http://127.0.0.1:8000/api/`. Aberta no navegador,
-mostra a página navegável do framework, com a lista de endpoints e formulários
-para testar cada operação.
+A API é feita com o Django REST framework e documentada com o Swagger gerado
+pelo `drf-spectacular` (todos em `requirements.txt`). O Swagger fica em
+`http://127.0.0.1:8000/api/` e o schema OpenAPI em `/api/schema/`; `/docs/`
+redireciona para o Swagger. O schema é gerado a partir dos serializers e
+ViewSets, então sempre mostra os campos e as operações que existem no código. Os
+arquivos do Swagger UI vêm do pacote `drf-spectacular-sidecar`, sem depender de
+internet.
 
 Todos os models do app `agendamento` têm endpoint, com `GET`/`POST` em
 `/api/<endpoint>/` e `GET`/`PUT`/`PATCH`/`DELETE` em `/api/<endpoint>/<id>/`. As
@@ -40,9 +43,12 @@ some junto com o usuário). A lista completa está no `README.md`.
 | `agendamento/serializers.py` | Um serializer por model; antes de salvar, chama o `clean()` do model |
 | `agendamento/api.py` | ViewSets e o `DefaultRouter` com os endpoints |
 | `agendamento/permissoes_api.py` | Permissão: só administradores (mesma regra do `/admin/`) |
+| `project/settings.py` (`SPECTACULAR_SETTINGS`) | Título, descrição e opções do Swagger |
 
-Autenticação por sessão (o mesmo login do site) e autenticação básica, para
-testar com `curl` ou Postman. Regras de negócio violadas voltam com `400` e a
+Autenticação por sessão (o mesmo login do site; o Swagger já envia o token CSRF
+nas operações de escrita) e autenticação básica, pelo botão **Authorize** do
+Swagger, por `curl` ou pelo Postman. A página do Swagger e o schema abrem sem
+login; as operações exigem administrador. Regras de negócio violadas voltam com `400` e a
 mensagem do model; excluir um registro protegido (`on_delete=PROTECT`) volta com
 `409` em vez de erro 500.
 

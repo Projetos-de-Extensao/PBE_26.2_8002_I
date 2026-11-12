@@ -34,10 +34,12 @@ Para não abrir o navegador automaticamente: `python iniciar.py --sem-navegador`
 
 ### API REST
 
-Com o servidor ligado, a API fica em `http://127.0.0.1:8000/api/`. Abrindo esse
-endereço no navegador, o Django REST framework mostra uma página navegável com
-todos os endpoints; em cada um dá para listar, criar, editar e excluir pelos
-formulários da própria página.
+Com o servidor ligado, abra `http://127.0.0.1:8000/api/`: é o Swagger da API,
+com todos os endpoints agrupados por model. Em cada operação, "Try it out" e
+"Execute" fazem a chamada de verdade. O schema OpenAPI fica em
+`http://127.0.0.1:8000/api/schema/`, e `/docs/` redireciona para o Swagger.
+Abrindo um endpoint direto no navegador (ex.: `/api/salas/`), aparece também a
+página navegável do Django REST framework, com formulários.
 
 | Endpoint | Model |
 | --- | --- |
@@ -61,9 +63,10 @@ formulários da própria página.
   `/api/<endpoint>/<id>/`.
 - `POST /api/recorrencias/<id>/gerar-ocorrencias/` cria os agendamentos da série
   e `POST /api/recorrencias/<id>/cancelar/` cancela as sessões futuras.
-- Só administradores acessam. Entre com `admin@demo.local` (pelo login do site
-  ou pelo link "Log in" da própria página da API). Fora do navegador, use
-  autenticação básica, por exemplo
+- O Swagger abre para qualquer um, mas as operações são só de administradores.
+  No Swagger, clique em **Authorize**, preencha o `basicAuth` com
+  `admin@demo.local` / `admin` e confirme; ou entre antes pelo login do site com
+  essa conta. Fora do navegador, use autenticação básica, por exemplo
   `curl -u admin@demo.local:admin http://127.0.0.1:8000/api/salas/`.
 - A API aplica as mesmas regras das telas (conflitos, disponibilidade,
   bloqueios). Dados inválidos voltam com `400` e a mensagem; excluir um registro

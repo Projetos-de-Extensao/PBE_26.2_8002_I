@@ -6,7 +6,8 @@ Uso:
 
 Use "python iniciar.py --sem-navegador" para não abrir o navegador sozinho.
 
-O script cria o ambiente virtual, instala o Django e o Django REST framework,
+O script cria o ambiente virtual, instala o Django, o Django REST framework e o
+Swagger (drf-spectacular),
 aplica as migrações,
 cria um acesso de administrador, carrega os dados de exemplo, sobe o servidor e abre o
 navegador. Funciona em Windows, macOS e Linux.
@@ -30,6 +31,7 @@ VENV = RAIZ / ".venv"
 MANAGE = RAIZ / "manage.py"
 DJANGO = "Django==6.1.2"
 REST_FRAMEWORK = "djangorestframework==3.18.3"
+SWAGGER = ["drf-spectacular==0.30.0", "drf-spectacular-sidecar==2026.10.1"]
 HOST = "127.0.0.1"
 PORTA = 8000
 PAGINA = "/"
@@ -74,15 +76,15 @@ def criar_venv():
 
 def instalar_django(python):
     tem_django = subprocess.run(
-        [str(python), "-c", "import django, rest_framework"],
+        [str(python), "-c", "import django, rest_framework, drf_spectacular, drf_spectacular_sidecar"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
     if tem_django.returncode == 0:
         return
-    aviso("Instalando o Django e o Django REST framework")
+    aviso("Instalando o Django, o Django REST framework e o Swagger")
     rodar([str(python), "-m", "pip", "install", "--quiet", "--upgrade", "pip"])
-    rodar([str(python), "-m", "pip", "install", "--quiet", DJANGO, REST_FRAMEWORK])
+    rodar([str(python), "-m", "pip", "install", "--quiet", DJANGO, REST_FRAMEWORK, *SWAGGER])
 
 
 def preparar_banco(python):

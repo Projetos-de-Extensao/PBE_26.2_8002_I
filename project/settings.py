@@ -84,6 +84,8 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "drf_spectacular",
+    "drf_spectacular_sidecar",
     "agendamento.apps.AgendamentoConfig",
 ]
 
@@ -118,15 +120,35 @@ WSGI_APPLICATION = "project.wsgi.application"
 
 AUTH_USER_MODEL = "agendamento.Usuario"
 
-# API REST em /api/ (Django REST Framework). A sessão é a mesma do site; a
-# autenticação básica permite testar com curl/Postman.
+# API REST (Django REST Framework), documentada no Swagger em /api/. A sessão é a
+# mesma do site; a autenticação básica permite testar pelo botão "Authorize" do
+# Swagger, por curl ou pelo Postman.
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
         "rest_framework.authentication.BasicAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": ["agendamento.permissoes_api.EhAdministrador"],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "API Equilibra",
+    "DESCRIPTION": (
+        "API REST do sistema de agendamento multidisciplinar. Todos os models têm "
+        "GET, POST, PUT, PATCH e DELETE. Acesso restrito a administradores: entre "
+        "no site com uma conta de administrador ou use o botão Authorize "
+        "(basicAuth) com o e-mail e a senha."
+    ),
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,
+    # Arquivos do Swagger UI servidos pelo próprio projeto, sem depender de CDN.
+    "SWAGGER_UI_DIST": "SIDECAR",
+    "SWAGGER_UI_FAVICON_HREF": "SIDECAR",
+    "SWAGGER_UI_SETTINGS": {"persistAuthorization": True, "tryItOutEnabled": True},
+}
+
 LOGIN_URL = "/"
 LOGIN_REDIRECT_URL = "/"
 
