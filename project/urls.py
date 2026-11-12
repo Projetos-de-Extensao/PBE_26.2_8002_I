@@ -1,3 +1,4 @@
+
 """
 URL configuration for project project.
 
@@ -57,10 +58,16 @@ from agendamento.views import (
     CancelarAgendamentoView,
     HorariosReagendamentoView,
     ReagendarAgendamentoView,
+    api_index,
+    api_schema,
+    swagger_docs,
 )
 from agendamento.admin_site import admin_site
 
 urlpatterns = [
+    path("docs/", swagger_docs, name="swagger_docs"),
+    path("api/schema/", api_schema, name="api_schema"),
+    path("api/", api_index, name="api_index"),
     path("admin/", admin_site.urls),
     path("administracao/", AdministracaoView.as_view(), name="administracao"),
     path(

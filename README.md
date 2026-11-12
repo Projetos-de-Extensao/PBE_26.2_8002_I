@@ -31,6 +31,11 @@ navegador. Funciona em Windows, macOS e Linux. Para parar, `Ctrl+C`.
 
 Para não abrir o navegador automaticamente: `python iniciar.py --sem-navegador`.
 
+Com o servidor ligado, abra `http://127.0.0.1:8000/docs/` para explorar as rotas
+do sistema no Swagger UI. O schema OpenAPI inclui as rotas registradas e os
+schemas de todos os modelos do app. Ele fica disponível em
+`http://127.0.0.1:8000/api/schema/`.
+
 ### Passo a passo, se preferir
 
 ```bash

@@ -159,6 +159,39 @@ O conteúdo foi derivado da <a href="../Iniciacao/pesquisa.md">pesquisa do tema<
 
 **Pós-condição:** Cadastros de profissionais, serviços, salas, recursos e permissões atualizados e disponíveis para os demais casos de uso.
 
+### UC06 - Consultar Horários para Reagendamento
+
+**Atores:** Cliente, Profissional, Recepcionista, Administrador, Sistema.
+
+**Responsável (ator principal):** Cliente dono do atendimento. O profissional
+responsável pelo atendimento, a recepção ou o administrador também podem fazer a
+consulta conforme suas permissões.
+
+**Pré-condição:** Ator autenticado e autorizado a operar o atendimento; o
+atendimento está ativo e ainda não ocorreu.
+
+**Fluxo Principal:**
+1. Ator seleciona um atendimento futuro que deseja reagendar (UC04).
+2. Ator informa a nova data desejada.
+3. Sistema verifica se o atendimento pode ser alterado e consulta os horários
+   disponíveis para o profissional e o serviço.
+4. Sistema desconsidera o próprio atendimento ao verificar conflitos e também
+   verifica a disponibilidade da sala e dos recursos já vinculados.
+5. Sistema retorna os horários livres para que o ator escolha um deles.
+
+**Fluxos Alternativos:**
+- FA1: Data ausente ou em formato inválido → sistema informa o erro e solicita
+  uma data válida.
+- FA2: Atendimento cancelado, concluído ou passado → sistema informa que não é
+  possível reagendá-lo.
+- FA3: Ator sem permissão sobre o atendimento → sistema não revela os dados do
+  atendimento e bloqueia a consulta (RF19, RN14).
+- FA4: Nenhum horário compatível → sistema retorna a lista vazia; o atendimento
+  original permanece inalterado.
+
+**Pós-condição:** Horários disponíveis apresentados; nenhum dado do atendimento
+é alterado até a confirmação do reagendamento (UC04).
+
 ## 5. Diagrama de Casos de Uso
 
 Diagrama de Caso de Uso (UML) representando os fluxos acima, em PlantUML:
@@ -192,6 +225,7 @@ usecase (Bloquear Horário) as UC03_1
 usecase (UC04: Reagendar ou Cancelar Atendimento) as UC04
 
 usecase (UC05: Gerenciar Cadastros e Permissões) as UC05
+usecase (UC06: Consultar Horários para Reagendamento) as UC06
 
 Cliente --> UC01
 Profissional --> UC01
@@ -216,6 +250,12 @@ Recepcionista --> UC04
 UC04 --> UC02_V : <<include>>
 
 Administrador --> UC05
+
+Cliente --> UC06
+Profissional --> UC06
+Recepcionista --> UC06
+Administrador --> UC06
+UC06 --> Sistema
 
 note right of UC02
   **Pré-condição**: Cliente autenticado.

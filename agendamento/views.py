@@ -1,5 +1,7 @@
 from datetime import date, datetime, time, timedelta
+import re
 
+from django.apps import apps
 from django import forms
 from django.contrib import messages
 from django.contrib.auth import login
@@ -9,9 +11,9 @@ from django.contrib.auth.views import LoginView as DjangoLoginView
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.http import Http404, HttpResponseRedirect, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
-from django.urls import reverse, reverse_lazy
+from django.urls import URLPattern, URLResolver, get_resolver, reverse, reverse_lazy
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext_lazy as _
@@ -32,6 +34,621 @@ from agendamento.models import (
     Usuario,
     horarios_livres,
 )
+
+
+def api_index(request):
+    """Documenta os endpoints do sistema que retornam JSON."""
+    return JsonResponse(
+        {
+            "nome": "API Equilibra",
+            "descricao": "Endpoints JSON disponíveis no sistema de agendamento.",
+            "base_url": request.build_absolute_uri("/"),
+            "autenticacao": (
+                "As operações exigem sessão autenticada. Requisições POST também "
+                "precisam do token CSRF."
+            ),
+            "endpoints": [
+                {
+                    "nome": "Prévia de agendamento recorrente",
+                    "metodo": "POST",
+                    "caminho": "/agendar/{servico_id}/previa-recorrencia/",
+                    "acesso": "Requer login como cliente.",
+                    "content_type": "application/x-www-form-urlencoded",
+                    "parametros": {
+                        "horario": "Obrigatório; horário ISO escolhido no formulário.",
+                        "data_termino": "Obrigatório; data final no formato AAAA-MM-DD.",
+                        "dias_semana": "Opcional; dias da semana selecionados.",
+                        "sala": "Opcional; ID da sala.",
+                        "recursos": "Opcional; IDs dos equipamentos.",
+                    },
+                    "resposta_sucesso": (
+                        "JSON com valido, total, total_validas, total_conflitos "
+                        "e sessoes."
+                    ),
+                },
+                {
+                    "nome": "Consultar horários para reagendamento",
+                    "metodo": "GET",
+                    "caminho": "/agendamentos/{agendamento_id}/horarios/?data=AAAA-MM-DD",
+                    "acesso": "Requer login e permissão sobre o agendamento.",
+                    "parametros": {
+                        "data": "Obrigatório; data consultada no formato AAAA-MM-DD."
+                    },
+                    "resposta_sucesso": (
+                        "JSON com horarios, data e duracao_minutos."
+                    ),
+                },
+                {
+                    "nome": "Reagendar atendimento",
+                    "metodo": "POST",
+                    "caminho": "/agendamentos/{agendamento_id}/reagendar/",
+                    "acesso": "Requer login e permissão sobre o agendamento.",
+                    "content_type": "application/x-www-form-urlencoded",
+                    "parametros": {
+                        "data": "Obrigatório; nova data no formato AAAA-MM-DD.",
+                        "hora_inicio": "Obrigatório; novo horário no formato HH:MM.",
+                    },
+                    "resposta_sucesso": (
+                        "JSON com ok, data, hora_inicio e hora_fim."
+                    ),
+                },
+            ],
+        }
+    )
+
+
+def api_schema(request):
+    """Publica o schema OpenAPI usado pela interface Swagger."""
+    session_security = [{"sessao": []}]
+    post_security = [{"sessao": [], "csrf": []}]
+    schema = {
+            "openapi": "3.0.3",
+            "info": {
+                "title": "API Equilibra",
+                "version": "1.0.0",
+                "description": (
+                    "Endpoints JSON de agendamento. As rotas exigem sessão "
+                    "autenticada; operações POST também exigem token CSRF."
+                ),
+            },
+            "tags": [
+                {
+                    "name": "Profissionais",
+                    "description": (
+                        "Rotas do perfil e da agenda profissional. Modelo principal: "
+                        "`Profissional`."
+                    ),
+                },
+                {
+                    "name": "Alunos (Clientes)",
+                    "description": (
+                        "Cadastro, perfil e agendamentos do aluno/cliente. Modelos "
+                        "principais: `Cliente`, `Usuario` e `Agendamento`."
+                    ),
+                },
+                {
+                    "name": "Recepção",
+                    "description": (
+                        "Operações realizadas por recepcionistas. Modelo principal: "
+                        "`Recepcionista`."
+                    ),
+                },
+                {
+                    "name": "Administração",
+                    "description": (
+                        "Gerenciamento dos modelos `Servico`, `Sala`, `Recurso` e "
+                        "demais dados administrativos."
+                    ),
+                },
+                {
+                    "name": "Administração Django",
+                    "description": "Rotas internas do admin Django; não são endpoints REST.",
+                },
+                {
+                    "name": "Sistema",
+                    "description": "Autenticação, recuperação de senha e documentação.",
+                },
+            ],
+            "servers": [{"url": request.build_absolute_uri("/").rstrip("/")}],
+            "components": {
+                "securitySchemes": {
+                    "sessao": {
+                        "type": "apiKey",
+                        "in": "cookie",
+                        "name": "sessionid",
+                        "description": "Cookie de sessão obtido ao fazer login.",
+                    },
+                    "csrf": {
+                        "type": "apiKey",
+                        "in": "header",
+                        "name": "X-CSRFToken",
+                        "description": (
+                            "Token CSRF do cookie csrftoken, necessário em POST."
+                        ),
+                    },
+                }
+            },
+            "paths": {
+                "/agendar/{servico_id}/previa-recorrencia/": {
+                    "post": {
+                        "operationId": "previewRecurringAppointments",
+                        "tags": ["Alunos (Clientes)"],
+                        "summary": "Prévia de agendamento recorrente",
+                        "description": "Avalia as datas da recorrência sem salvar agendamentos.",
+                        "security": post_security,
+                        "parameters": [
+                            {
+                                "name": "servico_id",
+                                "in": "path",
+                                "required": True,
+                                "schema": {"type": "integer"},
+                            }
+                        ],
+                        "requestBody": {
+                            "required": True,
+                            "content": {
+                                "application/x-www-form-urlencoded": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["horario", "data_termino"],
+                                        "properties": {
+                                            "horario": {
+                                                "type": "string",
+                                                "description": "Horário ISO disponibilizado pelo sistema.",
+                                            },
+                                            "data_termino": {
+                                                "type": "string",
+                                                "format": "date",
+                                            },
+                                            "dias_semana": {
+                                                "type": "array",
+                                                "items": {"type": "integer"},
+                                                "description": "Dias selecionados: 0 (segunda-feira) a 6 (domingo).",
+                                            },
+                                            "sala": {"type": "integer"},
+                                            "recursos": {
+                                                "type": "array",
+                                                "items": {"type": "integer"},
+                                            },
+                                        },
+                                    }
+                                }
+                            },
+                        },
+                        "responses": {
+                            "200": {
+                                "description": "Prévia calculada.",
+                                "content": {
+                                    "application/json": {
+                                        "schema": {
+                                            "type": "object",
+                                            "properties": {
+                                                "valido": {"type": "boolean"},
+                                                "total": {"type": "integer"},
+                                                "total_validas": {"type": "integer"},
+                                                "total_conflitos": {"type": "integer"},
+                                                "sessoes": {
+                                                    "type": "array",
+                                                    "items": {"type": "object"},
+                                                },
+                                            },
+                                        }
+                                    }
+                                },
+                            },
+                            "400": {"description": "Dados inválidos ou recorrência incompatível."},
+                            "403": {"description": "Usuário não tem perfil de cliente."},
+                        },
+                    }
+                },
+                "/agendamentos/{agendamento_id}/horarios/": {
+                    "get": {
+                        "operationId": "getRescheduleSlots",
+                        "tags": ["Alunos (Clientes)"],
+                        "summary": "Consultar horários para reagendamento",
+                        "security": session_security,
+                        "parameters": [
+                            {
+                                "name": "agendamento_id",
+                                "in": "path",
+                                "required": True,
+                                "schema": {"type": "integer"},
+                            },
+                            {
+                                "name": "data",
+                                "in": "query",
+                                "required": True,
+                                "schema": {"type": "string", "format": "date"},
+                            },
+                        ],
+                        "responses": {
+                            "200": {
+                                "description": "Horários livres na data.",
+                                "content": {
+                                    "application/json": {
+                                        "schema": {
+                                            "type": "object",
+                                            "properties": {
+                                                "horarios": {
+                                                    "type": "array",
+                                                    "items": {"type": "string"},
+                                                },
+                                                "data": {"type": "string", "format": "date"},
+                                                "duracao_minutos": {"type": "integer"},
+                                            },
+                                        }
+                                    }
+                                },
+                            },
+                            "400": {"description": "Data ausente, inválida ou agendamento não reagendável."},
+                            "404": {"description": "Agendamento não encontrado ou sem permissão."},
+                        },
+                    }
+                },
+                "/agendamentos/{agendamento_id}/reagendar/": {
+                    "post": {
+                        "operationId": "rescheduleAppointment",
+                        "tags": ["Alunos (Clientes)"],
+                        "summary": "Reagendar atendimento",
+                        "security": post_security,
+                        "parameters": [
+                            {
+                                "name": "agendamento_id",
+                                "in": "path",
+                                "required": True,
+                                "schema": {"type": "integer"},
+                            }
+                        ],
+                        "requestBody": {
+                            "required": True,
+                            "content": {
+                                "application/x-www-form-urlencoded": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["data", "hora_inicio"],
+                                        "properties": {
+                                            "data": {
+                                                "type": "string",
+                                                "format": "date",
+                                            },
+                                            "hora_inicio": {
+                                                "type": "string",
+                                                "format": "time",
+                                            },
+                                        },
+                                    }
+                                }
+                            },
+                        },
+                        "responses": {
+                            "200": {
+                                "description": "Agendamento reagendado.",
+                                "content": {
+                                    "application/json": {
+                                        "schema": {
+                                            "type": "object",
+                                            "properties": {
+                                                "ok": {"type": "boolean"},
+                                                "data": {"type": "string"},
+                                                "hora_inicio": {"type": "string"},
+                                                "hora_fim": {"type": "string"},
+                                            },
+                                        }
+                                    }
+                                },
+                            },
+                            "400": {"description": "Dados inválidos, conflito ou agendamento não reagendável."},
+                            "404": {"description": "Agendamento não encontrado ou sem permissão."},
+                        },
+                    }
+                },
+            },
+        }
+    paths = _openapi_paths()
+    paths.update(schema["paths"])
+    schema["paths"] = paths
+    schema["components"]["schemas"] = _model_schemas()
+    return JsonResponse(schema)
+
+
+def _openapi_paths():
+    """Converte todas as rotas Django registradas em operações OpenAPI."""
+    paths = {}
+    supported_methods = ("get", "post", "put", "patch", "delete")
+    json_views = {
+        "api_index",
+        "api_schema",
+        "PreviaRecorrenciaView",
+        "HorariosReagendamentoView",
+        "ReagendarAgendamentoView",
+    }
+
+    def route_string(pattern):
+        route_pattern = pattern.pattern
+        if hasattr(route_pattern, "_route"):
+            return route_pattern._route
+        route = route_pattern.regex.pattern.lstrip("^")
+        if route.endswith("$"):
+            route = route[:-1]
+        return re.sub(r"\(\?P<([a-zA-Z_][a-zA-Z0-9_]*)>[^)]+\)", r"{\1}", route)
+
+    def add_routes(patterns, prefix=""):
+        for pattern in patterns:
+            route = prefix + route_string(pattern)
+            if isinstance(pattern, URLResolver):
+                add_routes(pattern.url_patterns, route)
+                continue
+            if not isinstance(pattern, URLPattern):
+                continue
+
+            path = "/" + re.sub(
+                r"<(?:(?:[a-zA-Z_][a-zA-Z0-9_]*):)?([a-zA-Z_][a-zA-Z0-9_]*)>",
+                r"{\1}",
+                route,
+            )
+            callback = pattern.callback
+            view_class = getattr(callback, "view_class", None)
+            if view_class is not None:
+                methods = [
+                    method
+                    for method in supported_methods
+                    if method in view_class.http_method_names
+                    and hasattr(view_class, method)
+                ]
+                view_name = view_class.__name__
+            else:
+                view_name = getattr(callback, "__name__", "view")
+                if route.startswith("admin/"):
+                    admin_methods = {
+                        "index": ("get",),
+                        "login": ("get", "post"),
+                        "logout": ("post",),
+                        "password_change": ("get", "post"),
+                        "password_change_done": ("get",),
+                        "autocomplete_view": ("get",),
+                        "i18n_javascript": ("get",),
+                        "shortcut": ("get",),
+                        "user_change_password": ("get", "post"),
+                        "changelist_view": ("get", "post"),
+                        "add_view": ("get", "post"),
+                        "history_view": ("get",),
+                        "delete_view": ("get", "post"),
+                        "change_view": ("get", "post"),
+                        "app_index": ("get",),
+                        "catch_all_view": ("get",),
+                    }
+                    view_name = getattr(callback, "__qualname__", view_name).split(".")[-1]
+                    methods = list(admin_methods.get(view_name, ("get",)))
+                else:
+                    methods = ["get"]
+
+            if not methods:
+                methods = ["get"]
+            endpoint_name = pattern.name or view_name
+            if route.startswith("admin/"):
+                tag = "Administração Django"
+            elif route.startswith("administracao/profissionais/"):
+                tag = "Profissionais"
+            elif route.startswith("administracao/"):
+                tag = "Administração"
+            elif route.startswith("profissional/") or route.startswith("profissionais/"):
+                tag = "Profissionais"
+            elif route.startswith(
+                ("agendar/", "minha-agenda/", "agendamentos/", "cadastrar/", "perfil/")
+            ):
+                tag = "Alunos (Clientes)"
+            elif route.startswith("recepcao/"):
+                tag = "Recepção"
+            else:
+                tag = "Sistema"
+            is_json = view_name in json_views or endpoint_name in json_views
+            requires_session = not (
+                route in ("", "api/", "api/schema/", "docs/", "cadastrar/")
+                or route.startswith("senha/redefinir")
+            )
+
+            path_item = paths.setdefault(path, {})
+            path_parameters = [
+                {
+                    "name": name,
+                    "in": "path",
+                    "required": True,
+                    "schema": {"type": "string" if converter == "path" else "integer"},
+                }
+                for converter, name in re.findall(
+                    r"<(?:(\w+):)?(\w+)>", route
+                )
+            ]
+            path_parameters.extend(
+                {
+                    "name": name,
+                    "in": "path",
+                    "required": True,
+                    "schema": {"type": "string"},
+                }
+                for name in re.findall(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}", route)
+                if name not in {parameter["name"] for parameter in path_parameters}
+            )
+            for method in methods:
+                operation = {
+                    "tags": [tag],
+                    "summary": endpoint_name.replace("_", " "),
+                    "operationId": re.sub(
+                        r"[^a-zA-Z0-9_]",
+                        "_",
+                        f"{route}_{endpoint_name}_{method}",
+                    ),
+                    "description": (
+                        f"Rota Django `{route}`. "
+                        + (
+                            "Retorna dados JSON."
+                            if is_json
+                            else "Rota do sistema web; retorna uma página HTML ou redireciona."
+                        )
+                    ),
+                    "parameters": path_parameters,
+                    "responses": {
+                        "200": {
+                            "description": (
+                                "Resposta JSON."
+                                if is_json
+                                else "Página HTML ou redirecionamento."
+                            ),
+                            "content": {
+                                ("application/json" if is_json else "text/html"): {
+                                    "schema": (
+                                        {"type": "object"}
+                                        if is_json
+                                        else {"type": "string"}
+                                    )
+                                }
+                            },
+                        }
+                    },
+                }
+                if requires_session:
+                    operation["security"] = [
+                        {"sessao": [], **({"csrf": []} if method != "get" else {})}
+                    ]
+                path_item[method] = operation
+
+    add_routes(get_resolver().url_patterns)
+    return paths
+
+
+def _model_schemas():
+    """Gera schemas OpenAPI para todos os modelos concretos do app."""
+    type_mapping = {
+        "AutoField": ("integer", "int32"),
+        "BigAutoField": ("integer", "int64"),
+        "SmallAutoField": ("integer", "int32"),
+        "IntegerField": ("integer", "int32"),
+        "BigIntegerField": ("integer", "int64"),
+        "SmallIntegerField": ("integer", "int32"),
+        "PositiveIntegerField": ("integer", "int32"),
+        "PositiveBigIntegerField": ("integer", "int64"),
+        "PositiveSmallIntegerField": ("integer", "int32"),
+        "BooleanField": ("boolean", None),
+        "NullBooleanField": ("boolean", None),
+        "DateField": ("string", "date"),
+        "DateTimeField": ("string", "date-time"),
+        "TimeField": ("string", "time"),
+        "DecimalField": ("number", "double"),
+        "FloatField": ("number", "double"),
+        "EmailField": ("string", "email"),
+        "URLField": ("string", "uri"),
+        "UUIDField": ("string", "uuid"),
+        "JSONField": ("object", None),
+        "TextField": ("string", None),
+        "CharField": ("string", None),
+        "SlugField": ("string", None),
+        "DurationField": ("string", "duration"),
+        "BinaryField": ("string", "byte"),
+    }
+    schemas = {}
+    models = list(apps.get_app_config("agendamento").get_models())
+    for model in models:
+        properties = {}
+        required = []
+        for field in model._meta.get_fields():
+            if not getattr(field, "concrete", False):
+                continue
+            field_type, field_format = type_mapping.get(
+                field.get_internal_type(),
+                ("string", None),
+            )
+            if field.many_to_many:
+                property_schema = {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                }
+            else:
+                property_schema = {"type": field_type}
+                if field_format:
+                    property_schema["format"] = field_format
+                if field.is_relation and field.related_model:
+                    property_schema["description"] = (
+                        f"ID relacionado a {field.related_model.__name__}."
+                    )
+            if field.primary_key:
+                property_schema["readOnly"] = True
+            if field.null:
+                property_schema["nullable"] = True
+            if field.choices:
+                property_schema["enum"] = [
+                    value for value, _label in field.flatchoices
+                ]
+            if field.name == "password":
+                property_schema["writeOnly"] = True
+            properties[field.name] = property_schema
+            if (
+                not field.primary_key
+                and not field.blank
+                and not field.null
+                and not field.has_default()
+                and not field.auto_created
+            ):
+                required.append(field.name)
+        model_group = {
+            "Profissional": "Profissionais",
+            "Cliente": "Alunos (Clientes)",
+            "Agendamento": "Alunos (Clientes)",
+            "Recorrencia": "Alunos (Clientes)",
+            "Usuario": "Alunos (Clientes)",
+            "Perfil": "Alunos (Clientes)",
+            "Recepcionista": "Recepção",
+            "Administrador": "Administração",
+            "Papel": "Administração",
+            "Permissao": "Administração",
+            "Servico": "Administração",
+            "Disponibilidade": "Profissionais",
+            "Bloqueio": "Profissionais",
+            "Sala": "Administração",
+            "Recurso": "Administração",
+        }.get(model.__name__, "Administração")
+        schemas[model.__name__] = {
+            "type": "object",
+            "description": (
+                f"Modelo Django `{model._meta.label}`. Seção: `{model_group}`."
+            ),
+            "properties": properties,
+        }
+        if required:
+            schemas[model.__name__]["required"] = required
+    return schemas
+
+
+def swagger_docs(request):
+    """Serve a interface Swagger UI apontando para o schema OpenAPI local."""
+    schema_url = reverse("api_schema")
+    return HttpResponse(
+        """<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Swagger UI - API Equilibra</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+  <script>
+    window.onload = function () {
+      SwaggerUIBundle({
+        url: "%s",
+        dom_id: "#swagger-ui",
+        presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+        layout: "StandaloneLayout",
+        withCredentials: true
+      });
+    };
+  </script>
+</body>
+</html>"""
+        % schema_url
+    )
 
 
 def _acesso_negado(request):

@@ -1195,6 +1195,78 @@ class PerfilProfissionalTests(TestCase):
         )
 
 
+class ApiIndexTests(TestCase):
+    def test_api_index_lista_endpoints_json(self):
+        response = self.client.get(reverse("api_index"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/json")
+        dados = response.json()
+        self.assertEqual(len(dados["endpoints"]), 3)
+        self.assertEqual(dados["endpoints"][1]["metodo"], "GET")
+        self.assertIn(
+            "/agendamentos/{agendamento_id}/horarios/",
+            dados["endpoints"][1]["caminho"],
+        )
+
+    def test_swagger_docs_abre_interface_e_aponta_para_schema(self):
+        response = self.client.get(reverse("swagger_docs"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "SwaggerUIBundle")
+        self.assertContains(response, reverse("api_schema"))
+
+    def test_schema_openapi_descreve_endpoints_json(self):
+        response = self.client.get(reverse("api_schema"))
+
+        self.assertEqual(response.status_code, 200)
+        schema = response.json()
+        self.assertEqual(schema["openapi"], "3.0.3")
+        self.assertIn(
+            "/agendamentos/{agendamento_id}/horarios/",
+            schema["paths"],
+        )
+        self.assertIn(
+            "sessao",
+            schema["components"]["securitySchemes"],
+        )
+        self.assertIn("/administracao/", schema["paths"])
+        self.assertIn("/profissional/agenda/", schema["paths"])
+        self.assertIn("/admin/", schema["paths"])
+        self.assertGreater(len(schema["paths"]), 40)
+        model_schemas = schema["components"]["schemas"]
+        self.assertGreaterEqual(len(model_schemas), 14)
+        self.assertIn("Agendamento", model_schemas)
+        self.assertIn("Profissional", model_schemas)
+        self.assertIn("Recorrencia", model_schemas)
+        self.assertIn("data_hora_inicio", model_schemas["Agendamento"]["properties"])
+        self.assertIn(
+            "`Profissionais`",
+            model_schemas["Profissional"]["description"],
+        )
+        self.assertIn(
+            "`Alunos (Clientes)`",
+            model_schemas["Cliente"]["description"],
+        )
+        tags = {tag["name"] for tag in schema["tags"]}
+        self.assertIn("Profissionais", tags)
+        self.assertIn("Alunos (Clientes)", tags)
+        self.assertEqual(
+            schema["paths"]["/profissional/agenda/"]["get"]["tags"],
+            ["Profissionais"],
+        )
+        self.assertEqual(
+            schema["paths"]["/minha-agenda/"]["get"]["tags"],
+            ["Alunos (Clientes)"],
+        )
+        operation_ids = [
+            operation["operationId"]
+            for path_item in schema["paths"].values()
+            for operation in path_item.values()
+        ]
+        self.assertEqual(len(operation_ids), len(set(operation_ids)))
+
+
 class NovoAgendamentoViewTests(TestCase):
     def setUp(self):
         papel_profissional = Papel.objects.create(nome="Profissional")
