@@ -5,6 +5,9 @@ title: Diagrama de Casos de Uso
 
 ## Casos de Uso
 
+> Esta página complementa o levantamento em [Requisitos e Casos de Uso](./levreq.md).
+> Para o comportamento implementado, consulte também a [rastreabilidade](../Construcao/rastreabilidade.md).
+
 ### Descrição:
 
 - Contas
@@ -31,7 +34,7 @@ title: Diagrama de Casos de Uso
 - Serviços
 	- Cadastro
 	- Duração
-	- Modalidade (presencial/online)
+	- Vínculo com modalidade do profissional (presencial/online)
 	- Vínculo com profissional
 
 - Disponibilidade
@@ -115,7 +118,7 @@ title: Diagrama de Casos de Uso
 	- Sistema
 
 - Pré-Condições:
-	- Cliente deve estar autenticado
+	- Nenhuma para pesquisa e consulta do perfil
 
 - Fluxo Básico:
 	1. Cliente informa filtros de especialidade, serviço ou modalidade
@@ -127,6 +130,9 @@ title: Diagrama de Casos de Uso
 - Fluxos Alternativos:
 	- 3a. Nenhum profissional encontrado
 		- 3a1. Sistema informa que não há resultados e sugere remover filtros
+
+> A busca e a visualização dos perfis de profissionais são públicas; o login é
+> necessário para efetivar um agendamento.
 
 ### Consulta de disponibilidade
 
@@ -202,33 +208,44 @@ title: Diagrama de Casos de Uso
 
 - Atores:
 	- Cliente
+	- Profissional responsável pelo atendimento
 	- Recepcionista
+	- Administrador
 	- Sistema
 
 - Pré-Condições:
-	- Deve existir atendimento futuro confirmado
+	- Ator deve estar autenticado e autorizado a operar o atendimento
+	- Deve existir atendimento futuro agendado ou confirmado
 
 - Fluxo Básico:
 	1. Ator seleciona o atendimento e solicita o reagendamento
-	2. Sistema exibe os horários disponíveis
+	2. Ator informa uma data e o Sistema exibe os horários disponíveis (UC06)
 	3. Ator escolhe o novo horário
 	4. Sistema valida os conflitos do novo horário
-	5. Sistema atualiza o atendimento
-	6. Sistema libera o horário anterior
+	5. Sistema atualiza o atendimento somente após validar o novo horário
 
 - Fluxos Alternativos:
 	- 4a. Novo horário em conflito
-		- 4a1. Sistema exibe mensagem de erro e mantém o agendamento original
+		- 4a1. Sistema exibe mensagem de erro e mantém o agendamento original; o ator pode consultar novamente os horários
+	- 1b. Ator não tem permissão ou o atendimento já passou, está cancelado ou concluído
+		- 1b1. Sistema bloqueia a operação
+
+> A interface de cancelamento e reagendamento está na agenda do cliente. As
+> rotas protegidas autorizam também o profissional associado, a recepção e o
+> administrador; a agenda da recepção ainda não apresenta controles próprios.
 
 ### Cancelamento de um atendimento
 
 - Atores:
 	- Cliente
+	- Profissional responsável pelo atendimento
 	- Recepcionista
+	- Administrador
 	- Sistema
 
 - Pré-Condições:
-	- Deve existir atendimento futuro confirmado
+	- Ator deve estar autenticado e autorizado a operar o atendimento
+	- Deve existir atendimento futuro agendado ou confirmado
 
 - Fluxo Básico:
 	1. Ator seleciona o atendimento e solicita o cancelamento
@@ -239,7 +256,36 @@ title: Diagrama de Casos de Uso
 
 - Fluxos Alternativos:
 	- 2a. Atendimento pertence a uma recorrência
-		- 2a1. Sistema pergunta se o cancelamento vale para a ocorrência ou para toda a série
+		- 2a1. Ator pode solicitar o cancelamento da ocorrência ou das sessões futuras da série
+	- 1a. Ator não tem permissão ou o atendimento já passou, está cancelado ou concluído
+		- 1a1. Sistema bloqueia a operação
+
+### Consulta de horários para reagendamento
+
+- Atores:
+	- Cliente dono do atendimento
+	- Profissional associado ao atendimento
+	- Recepcionista
+	- Administrador
+	- Sistema
+
+- Pré-Condições:
+	- Ator deve estar autenticado e autorizado a operar o atendimento
+	- Atendimento deve estar futuro, ativo e agendado ou confirmado
+
+- Fluxo Básico:
+	1. Ator informa o atendimento que deseja reagendar e uma data
+	2. Sistema consulta horários compatíveis com a disponibilidade do profissional
+	3. Sistema desconsidera o próprio atendimento nos conflitos e valida sala e recursos vinculados
+	4. Sistema retorna os horários livres sem alterar o atendimento
+
+- Fluxos Alternativos:
+	- 1a. Data ausente ou em formato inválido
+		- 1a1. Sistema retorna mensagem de erro solicitando uma data válida
+	- 1b. Ator não tem permissão ou o atendimento não pode mais ser alterado
+		- 1b1. Sistema bloqueia a consulta
+	- 3a. Não há horários livres
+		- 3a1. Sistema retorna uma lista vazia e mantém o atendimento original
 
 ### Visualização da agenda
 
@@ -272,16 +318,13 @@ title: Diagrama de Casos de Uso
 
 - Fluxo Básico:
 	1. Profissional informa os dias e as faixas de horário de atendimento
-	2. Profissional vincula os serviços que oferece
-	3. Sistema valida as faixas informadas
-	4. Sistema persiste a disponibilidade
-	5. Sistema passa a exibir os horários na consulta dos Clientes
+	2. Sistema valida as faixas informadas
+	3. Sistema persiste a disponibilidade
+	4. Sistema passa a considerar esses horários nas consultas dos clientes
 
 - Fluxos Alternativos:
-	- 3a. Faixas de horário sobrepostas
-		- 3a1. Sistema exibe mensagem de erro e solicita correção
-	- 4a. Redução de disponibilidade com atendimentos já marcados
-		- 4a1. Sistema lista os atendimentos afetados antes de salvar
+	- 2a. Horário final não é posterior ao inicial
+		- 2a1. Sistema exibe mensagem de erro e solicita correção
 
 ### Bloqueio de horários pelo profissional
 
@@ -313,16 +356,25 @@ title: Diagrama de Casos de Uso
 	- Recepcionista deve estar autenticado
 
 - Fluxo Básico:
-	1. Recepcionista cadastra o Cliente com os dados básicos
+	1. Recepcionista seleciona um Cliente já cadastrado
 	2. Recepcionista consulta a disponibilidade dos profissionais
-	3. Recepcionista cria, reagenda ou cancela atendimentos em nome do Cliente
-	4. Sistema aplica as mesmas validações de conflito do agendamento
+	3. Recepcionista cria um atendimento em nome do Cliente
+	4. Sistema aplica as mesmas validações de conflito do agendamento e registra a recepcionista que o operou
+	5. Recepcionista consulta a agenda do dia
 
 - Fluxos Alternativos:
-	- 1a. Cliente já possui cadastro
-		- 1a1. Sistema exibe o cadastro existente
+	- 1a. Cliente não está cadastrado
+		- 1a1. Cliente deve criar a própria conta antes do agendamento pela recepção
 	- 3a. Recepcionista tenta acessar função administrativa
 		- 3a1. Sistema nega o acesso por falta de privilégio
+
+> Embora as rotas protegidas de cancelamento e reagendamento aceitem a
+> recepção, esses controles ainda não estão integrados à interface da agenda
+> da recepção.
+
+> O sistema não coleta data de nascimento, não verifica a idade do cliente e
+> não cadastra responsável legal para aluno menor de idade. O administrador é
+> o responsável pelo estabelecimento, não o responsável legal do aluno.
 
 ### Gerenciamento de profissionais e serviços
 

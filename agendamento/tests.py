@@ -1205,7 +1205,7 @@ class ApiIndexTests(TestCase):
         self.assertEqual(len(dados["endpoints"]), 3)
         self.assertEqual(dados["endpoints"][1]["metodo"], "GET")
         self.assertIn(
-            "/agendamentos/{agendamento_id}/horarios/",
+            "/agendamentos/{pk}/horarios/",
             dados["endpoints"][1]["caminho"],
         )
 
@@ -1223,6 +1223,14 @@ class ApiIndexTests(TestCase):
         schema = response.json()
         self.assertEqual(schema["openapi"], "3.0.3")
         self.assertIn(
+            "/agendamentos/{pk}/horarios/",
+            schema["paths"],
+        )
+        self.assertIn(
+            "/agendamentos/{pk}/reagendar/",
+            schema["paths"],
+        )
+        self.assertNotIn(
             "/agendamentos/{agendamento_id}/horarios/",
             schema["paths"],
         )
@@ -1259,6 +1267,46 @@ class ApiIndexTests(TestCase):
             schema["paths"]["/minha-agenda/"]["get"]["tags"],
             ["Alunos (Clientes)"],
         )
+        cadastro = schema["paths"]["/cadastrar/"]["post"]
+        cadastro_schema = cadastro["requestBody"]["content"][
+            "application/x-www-form-urlencoded"
+        ]["schema"]
+        self.assertIn("nome", cadastro_schema["properties"])
+        self.assertIn("email", cadastro_schema["properties"])
+        self.assertIn("senha", cadastro_schema["properties"])
+        self.assertIn("confirmar_senha", cadastro_schema["properties"])
+        self.assertEqual(cadastro["security"], [{"csrf": []}])
+        login = schema["paths"]["/"]["post"]
+        login_schema = login["requestBody"]["content"][
+            "application/x-www-form-urlencoded"
+        ]["schema"]
+        self.assertEqual(
+            set(login_schema["required"]),
+            {"username", "password"},
+        )
+        self.assertNotIn("put", schema["paths"]["/"])
+        self.assertNotIn("put", schema["paths"]["/cadastrar/"])
+        self.assertIn(
+            "horario",
+            schema["paths"]["/agendar/{servico_id}/"]["post"]["requestBody"]
+            ["content"]["application/x-www-form-urlencoded"]["schema"]["properties"],
+        )
+        self.assertIn(
+            "duracao_minutos",
+            schema["paths"]["/administracao/servicos/novo/"]["post"]
+            ["requestBody"]["content"]["application/x-www-form-urlencoded"]
+            ["schema"]["properties"],
+        )
+        for path, path_item in schema["paths"].items():
+            if path.startswith("/admin/"):
+                continue
+            for method, operation in path_item.items():
+                if method == "post":
+                    self.assertTrue(
+                        "requestBody" in operation
+                        or operation.get("x-no-request-body"),
+                        f"POST {path} is missing a request-body description",
+                    )
         operation_ids = [
             operation["operationId"]
             for path_item in schema["paths"].values()

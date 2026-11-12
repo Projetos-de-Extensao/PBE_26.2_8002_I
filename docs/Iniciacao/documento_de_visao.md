@@ -116,7 +116,10 @@ intervalo.
 A aplicação não substitui prontuário clínico, não realiza telemedicina, não
 emite diagnóstico nem prescrição, não processa convênios ou pagamentos e não
 possui aplicativo nativo. Lembretes automáticos e lista de espera foram
-classificados como evolução e não fazem parte desta entrega.
+classificados como evolução e não fazem parte desta entrega. O sistema também
+não coleta data de nascimento, não verifica se o cliente é menor de idade nem
+cadastra ou vincula um responsável legal; o administrador do estabelecimento
+não representa esse responsável.
 </p>
 
 ## Referências Bibliográficas
@@ -134,3 +137,4 @@ classificados como evolução e não fazem parte desta entrega.
 | Data | Versão | Descrição | Autor(es) |
 | -- | -- | -- | -- |
 | 11/11/2026 | 1.0 | Documento de visão escrito a partir da pesquisa, do brainstorm e do produto implementado | Equipe do projeto |
+| 12/11/2026 | 1.1 | Esclarecimento de que responsável legal por cliente menor está fora do escopo atual | Equipe do projeto |

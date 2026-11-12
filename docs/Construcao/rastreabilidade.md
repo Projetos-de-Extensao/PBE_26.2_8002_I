@@ -30,8 +30,8 @@ profissional em `agendamento/agenda_profissional.py`, a administração em
 | RF08 | Cliente pesquisa profissionais | `/profissionais/` | Implementado |
 | RF09 | Cliente visualiza horários disponíveis | Perfil do profissional e tela de agendar | Implementado |
 | RF10 | Cliente realiza agendamento | `/agendar/<servico>/` | Implementado |
-| RF11 | Cliente cancela atendimento | `/minha-agenda/<id>/cancelar/` | Implementado |
-| RF12 | Cliente reagenda atendimento | `/agendamentos/<id>/reagendar/` | Implementado |
+| RF11 | Cliente cancela atendimento | `/minha-agenda/<id>/cancelar/` | Implementado na agenda do cliente; a rota protegida também autoriza o profissional associado, a recepção e o administrador |
+| RF12 | Cliente reagenda atendimento | `/agendamentos/<id>/horarios/` e `/agendamentos/<id>/reagendar/` | Implementado na agenda do cliente; as rotas protegidas também autorizam o profissional associado, a recepção e o administrador |
 | RF13 | Impedir conflito do profissional | `Agendamento.motivos_conflito` | Implementado |
 | RF14 | Impedir conflito do cliente | `Agendamento.motivos_conflito` | Implementado |
 | RF15 | Impedir conflito de sala ou equipamento | `Agendamento.motivos_conflito` e `conflitos_de_recursos` | Implementado |
@@ -44,7 +44,7 @@ profissional em `agendamento/agenda_profissional.py`, a administração em
 | RF22 | Lista de espera | — | Fora do MVP |
 | RF23 | Informações operacionais do administrador | Painel `/administracao/` | Implementado |
 | RF24 | Registro do status do atendimento | Campo `status` em `Agendamento` | Implementado |
-| RF25 | Recepção cria, reagenda ou cancela agendamentos | `/recepcao/agendar/<servico>/` e `/recepcao/agenda/` | Parcial: a recepção cria atendimentos e acompanha a agenda do dia; reagendar e cancelar continuam com o cliente |
+| RF25 | Recepção cria, reagenda ou cancela agendamentos | `/recepcao/agendar/<servico>/`, `/recepcao/agenda/` e rotas protegidas de cancelamento/reagendamento | Parcial: a recepção cria atendimentos, acompanha a agenda e tem permissão nas rotas de cancelamento/reagendamento, mas não há controles dessas operações na interface da agenda da recepção |
 | RF26 | Informar o motivo do conflito e permitir nova escolha | Tela de agendar, com sugestões de horário | Implementado |
 
 ## Regras de negócio
@@ -71,11 +71,12 @@ profissional em `agendamento/agenda_profissional.py`, a administração em
 
 <p align = "justify">
 Lembretes automáticos (RF21) e lista de espera (RF22) foram classificados como
-evolução desde o brainstorm e não entraram nesta entrega. No RF25, a recepção
-cria atendimentos e acompanha a agenda do dia; reagendar e cancelar em nome do
-cliente ficaram para a próxima iteração. Prontuário clínico, telemedicina,
-convênios, pagamentos e aplicativo nativo seguem fora do escopo, como registrado
-na pesquisa do tema.
+evolução desde o brainstorm e não entraram nesta entrega. No RF25, falta integrar
+os controles de reagendamento e cancelamento à interface da recepção, embora as
+rotas protegidas já permitam essas operações aos papéis autorizados. Prontuário
+clínico, telemedicina, convênios, pagamentos, aplicativo nativo e gestão de
+responsável legal para menores seguem fora do escopo, como registrado na pesquisa
+do tema.
 </p>
 
 ## Testes

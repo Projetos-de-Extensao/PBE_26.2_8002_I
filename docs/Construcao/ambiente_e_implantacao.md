@@ -22,6 +22,19 @@ O script cria o ambiente virtual, instala o Django, aplica as migrações,
 carrega os dados de exemplo, cria o acesso de demonstração e sobe o servidor.
 O passo a passo manual está no `README.md` do repositório.
 
+## Documentação das rotas
+
+Com o servidor local ligado, a interface Swagger fica em
+`http://127.0.0.1:8000/docs/` e o schema OpenAPI em
+`http://127.0.0.1:8000/api/schema/`. A interface carrega os arquivos do Swagger
+UI de um CDN, portanto precisa de acesso à internet para exibir a documentação.
+
+O schema enumera as rotas Django registradas e inclui os modelos do app como
+schemas de referência. Muitas rotas são páginas HTML ou formulários do sistema,
+não endpoints de uma API REST; a inclusão de um modelo no schema também não
+significa que exista CRUD REST para ele. As operações JSON existentes estão
+indicadas nas descrições da documentação.
+
 ## Variáveis de ambiente
 
 O arquivo `.env.example` lista todas, com os valores usados em desenvolvimento.

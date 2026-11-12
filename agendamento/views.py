@@ -69,7 +69,7 @@ def api_index(request):
                 {
                     "nome": "Consultar horários para reagendamento",
                     "metodo": "GET",
-                    "caminho": "/agendamentos/{agendamento_id}/horarios/?data=AAAA-MM-DD",
+                    "caminho": "/agendamentos/{pk}/horarios/?data=AAAA-MM-DD",
                     "acesso": "Requer login e permissão sobre o agendamento.",
                     "parametros": {
                         "data": "Obrigatório; data consultada no formato AAAA-MM-DD."
@@ -81,7 +81,7 @@ def api_index(request):
                 {
                     "nome": "Reagendar atendimento",
                     "metodo": "POST",
-                    "caminho": "/agendamentos/{agendamento_id}/reagendar/",
+                    "caminho": "/agendamentos/{pk}/reagendar/",
                     "acesso": "Requer login e permissão sobre o agendamento.",
                     "content_type": "application/x-www-form-urlencoded",
                     "parametros": {
@@ -241,7 +241,7 @@ def api_schema(request):
                         },
                     }
                 },
-                "/agendamentos/{agendamento_id}/horarios/": {
+                "/agendamentos/{pk}/horarios/": {
                     "get": {
                         "operationId": "getRescheduleSlots",
                         "tags": ["Alunos (Clientes)"],
@@ -249,7 +249,7 @@ def api_schema(request):
                         "security": session_security,
                         "parameters": [
                             {
-                                "name": "agendamento_id",
+                                "name": "pk",
                                 "in": "path",
                                 "required": True,
                                 "schema": {"type": "integer"},
@@ -285,7 +285,7 @@ def api_schema(request):
                         },
                     }
                 },
-                "/agendamentos/{agendamento_id}/reagendar/": {
+                "/agendamentos/{pk}/reagendar/": {
                     "post": {
                         "operationId": "rescheduleAppointment",
                         "tags": ["Alunos (Clientes)"],
@@ -293,7 +293,7 @@ def api_schema(request):
                         "security": post_security,
                         "parameters": [
                             {
-                                "name": "agendamento_id",
+                                "name": "pk",
                                 "in": "path",
                                 "required": True,
                                 "schema": {"type": "integer"},
@@ -354,7 +354,7 @@ def api_schema(request):
 def _openapi_paths():
     """Converte todas as rotas Django registradas em operações OpenAPI."""
     paths = {}
-    supported_methods = ("get", "post", "put", "patch", "delete")
+    supported_methods = ("get", "post")
     json_views = {
         "api_index",
         "api_schema",
@@ -393,7 +393,7 @@ def _openapi_paths():
                     method
                     for method in supported_methods
                     if method in view_class.http_method_names
-                    and hasattr(view_class, method)
+                    and callable(getattr(view_class, method, None))
                 ]
                 view_name = view_class.__name__
             else:
@@ -469,6 +469,33 @@ def _openapi_paths():
                 for name in re.findall(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}", route)
                 if name not in {parameter["name"] for parameter in path_parameters}
             )
+            query_parameters = {
+                "profissionais/": [
+                    ("especialidade", "string"),
+                    ("servico", "string"),
+                    ("modalidade", "string"),
+                ],
+                "recepcao/agenda/": [("dia", "string", "date")],
+                "minha-agenda/": [
+                    ("data_inicio", "string", "date"),
+                    ("data_fim", "string", "date"),
+                ],
+                "agendamentos/<int:pk>/horarios/": [
+                    ("data", "string", "date"),
+                ],
+            }.get(route, [])
+            for parameter in query_parameters:
+                name, value_type = parameter[:2]
+                item = {
+                    "name": name,
+                    "in": "query",
+                    "required": False,
+                    "schema": {"type": value_type},
+                }
+                if len(parameter) == 3:
+                    item["schema"]["format"] = parameter[2]
+                    item["required"] = True
+                path_parameters.append(item)
             for method in methods:
                 operation = {
                     "tags": [tag],
@@ -506,14 +533,259 @@ def _openapi_paths():
                         }
                     },
                 }
+                if route == "cadastrar/" and method == "post":
+                    operation["summary"] = "Criar conta"
+                    operation["description"] = (
+                        "Envia o formulário de cadastro do sistema web. A conta é "
+                        "criada e a sessão é iniciada automaticamente. Não é uma "
+                        "resposta JSON."
+                    )
+                    operation["security"] = [{"csrf": []}]
+                    operation["requestBody"] = {
+                        "required": True,
+                        "content": {
+                            "application/x-www-form-urlencoded": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "nome",
+                                        "email",
+                                        "papel",
+                                        "senha",
+                                        "confirmar_senha",
+                                    ],
+                                    "properties": {
+                                        "nome": {
+                                            "type": "string",
+                                            "maxLength": 150,
+                                        },
+                                        "email": {
+                                            "type": "string",
+                                            "format": "email",
+                                        },
+                                        "papel": {
+                                            "type": "string",
+                                            "enum": [
+                                                "cliente",
+                                                "profissional",
+                                                "recepcionista",
+                                            ],
+                                            "default": "cliente",
+                                        },
+                                        "especialidade": {
+                                            "type": "string",
+                                            "maxLength": 150,
+                                            "description": (
+                                                "Obrigatória se papel=profissional."
+                                            ),
+                                        },
+                                        "modalidade": {
+                                            "type": "string",
+                                            "enum": [
+                                                "presencial",
+                                                "online",
+                                                "hibrido",
+                                            ],
+                                            "description": (
+                                                "Obrigatória se papel=profissional."
+                                            ),
+                                        },
+                                        "senha": {
+                                            "type": "string",
+                                            "format": "password",
+                                        },
+                                        "confirmar_senha": {
+                                            "type": "string",
+                                            "format": "password",
+                                        },
+                                    },
+                                }
+                            }
+                        },
+                    }
+                elif route == "" and method == "post":
+                    operation["summary"] = "Entrar na conta"
+                    operation["description"] = (
+                        "Autentica com e-mail e senha pelo formulário do sistema. "
+                        "O campo do e-mail chama-se `username` no formulário Django. "
+                        "Ao sucesso, cria a sessão e redireciona; não retorna JSON."
+                    )
+                    operation["security"] = [{"csrf": []}]
+                    operation["requestBody"] = {
+                        "required": True,
+                        "content": {
+                            "application/x-www-form-urlencoded": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["username", "password"],
+                                    "properties": {
+                                        "username": {
+                                            "type": "string",
+                                            "format": "email",
+                                            "description": "E-mail cadastrado.",
+                                        },
+                                        "password": {
+                                            "type": "string",
+                                            "format": "password",
+                                        },
+                                    },
+                                }
+                            }
+                        },
+                    }
+                elif route == "perfil/" and method == "post":
+                    operation["summary"] = "Atualizar perfil"
+                    operation["description"] = (
+                        "Atualiza o nome e telefone; para profissional também "
+                        "especialidade e apresentação. Formulário HTML Django."
+                    )
+                    operation["requestBody"] = _form_request_body(
+                        {
+                            "nome": ("string", True),
+                            "telefone": ("string", False),
+                            "especialidade": ("string", False),
+                            "apresentacao": ("string", False),
+                        }
+                    )
+                elif route == "profissional/disponibilidade/" and method == "post":
+                    operation["summary"] = "Cadastrar disponibilidade profissional"
+                    operation["requestBody"] = _form_request_body(
+                        {
+                            "dia_semana": ("integer", True, list(range(7))),
+                            "hora_inicio": ("string", True, "time"),
+                            "hora_fim": ("string", True, "time"),
+                        }
+                    )
+                elif route == "profissional/bloqueios/novo/" and method == "post":
+                    operation["summary"] = "Criar bloqueio de horário"
+                    operation["requestBody"] = _form_request_body(
+                        {
+                            "data": ("string", True, "date"),
+                            "hora_inicio": ("string", True, "time"),
+                            "hora_fim": ("string", True, "time"),
+                            "motivo": ("string", True),
+                            "confirmar": ("string", False, ["1"]),
+                            "origem": ("string", False),
+                        }
+                    )
+                elif route == "minha-agenda/<int:pk>/cancelar/" and method == "post":
+                    operation["summary"] = "Cancelar atendimento"
+                    operation["description"] = (
+                        "Cancela uma ocorrência ou, com escopo=serie, as sessões "
+                        "futuras ativas da recorrência. Formulário HTML Django."
+                    )
+                    operation["requestBody"] = _form_request_body(
+                        {
+                            "escopo": ("string", False, ["ocorrencia", "serie"]),
+                            "origem": ("string", False),
+                        }
+                    )
+                elif method == "post" and view_class is not None:
+                    form_class = getattr(view_class, "form_class", None)
+                    form_fields = getattr(form_class, "base_fields", None)
+                    if form_fields:
+                        operation["requestBody"] = _form_request_body(
+                            {
+                                field_name: _openapi_form_field(field)
+                                for field_name, field in form_fields.items()
+                            }
+                        )
+                if method == "post" and "requestBody" not in operation:
+                    if route.startswith("admin/"):
+                        operation["description"] += (
+                            " O Django Admin processa formulários HTML próprios, "
+                            "com campos variáveis; esta rota não é destinada ao "
+                            "envio pelo Swagger."
+                        )
+                        operation["x-html-form-route"] = True
+                    else:
+                        operation["description"] += (
+                            " Não requer campos adicionais no corpo da requisição; "
+                            "os dados necessários estão no caminho ou são enviados "
+                            "pelo token CSRF."
+                        )
+                        operation["x-no-request-body"] = True
                 if requires_session:
-                    operation["security"] = [
-                        {"sessao": [], **({"csrf": []} if method != "get" else {})}
-                    ]
+                    operation.setdefault(
+                        "security",
+                        [
+                            {
+                                "sessao": [],
+                                **({"csrf": []} if method != "get" else {}),
+                            }
+                        ],
+                    )
                 path_item[method] = operation
 
     add_routes(get_resolver().url_patterns)
     return paths
+
+
+def _openapi_form_field(field):
+    """Converte um campo Django Form em tipo e obrigatoriedade OpenAPI."""
+    if isinstance(field, forms.ModelMultipleChoiceField):
+        return ("array", field.required, None, "integer")
+    if isinstance(field, forms.MultipleChoiceField):
+        choices = [value for value, _label in field.choices if value != ""]
+        return ("array", field.required, choices, "string")
+    if isinstance(field, forms.ModelChoiceField):
+        return ("integer", field.required)
+    if isinstance(field, forms.BooleanField):
+        return ("boolean", field.required)
+    if isinstance(field, forms.DateTimeField):
+        return ("string", field.required, "date-time")
+    if isinstance(field, forms.DateField):
+        return ("string", field.required, "date")
+    if isinstance(field, forms.TimeField):
+        return ("string", field.required, "time")
+    if isinstance(field, forms.EmailField):
+        return ("string", field.required, "email")
+    if isinstance(field, forms.IntegerField):
+        return ("integer", field.required)
+    if isinstance(field, forms.DecimalField):
+        return ("number", field.required)
+    if isinstance(field, forms.ChoiceField):
+        choices = [value for value, _label in field.choices if value != ""]
+        return ("string", field.required, choices)
+    if isinstance(field, forms.FileField):
+        return ("string", field.required, "binary")
+    if getattr(field.widget, "input_type", None) == "password":
+        return ("string", field.required, "password")
+    return ("string", field.required)
+
+
+def _form_request_body(fields):
+    properties = {}
+    required = []
+    for name, definition in fields.items():
+        value_type, is_required, *details = definition
+        if value_type == "array":
+            item_type = details[1] if len(details) > 1 and details[1] else "string"
+            property_schema = {
+                "type": "array",
+                "items": {"type": item_type},
+            }
+            if details and details[0]:
+                property_schema["items"]["enum"] = details[0]
+        else:
+            property_schema = {"type": value_type}
+            if details:
+                if isinstance(details[0], list):
+                    property_schema["enum"] = details[0]
+                elif details[0]:
+                    property_schema["format"] = details[0]
+        properties[name] = property_schema
+        if is_required:
+            required.append(name)
+    schema = {"type": "object", "properties": properties}
+    if required:
+        schema["required"] = required
+    return {
+        "required": True,
+        "content": {
+            "application/x-www-form-urlencoded": {"schema": schema}
+        },
+    }
 
 
 def _model_schemas():

@@ -125,21 +125,38 @@ O conteúdo foi derivado da <a href="../Iniciacao/pesquisa.md">pesquisa do tema<
 
 ### UC04 - Reagendar ou Cancelar Atendimento
 
-**Atores:** Cliente, Recepcionista.
+**Atores:** Cliente, Profissional responsável pelo atendimento, Recepcionista,
+Administrador, Sistema.
 
-**Pré-condição:** Existe um atendimento previamente confirmado (RF11, RF12, RF25).
+**Ator principal:** Cliente dono do atendimento. O profissional associado, a
+recepção ou o administrador também podem operar o atendimento conforme as
+permissões implementadas.
+
+**Pré-condição:** Ator autenticado e autorizado sobre o atendimento; existe um
+atendimento futuro com status agendado ou confirmado.
 
 **Fluxo Principal:**
-1. Ator seleciona o atendimento na agenda do cliente ou na agenda operada pela recepção.
+1. Ator seleciona o atendimento na agenda ou informa seu identificador.
 2. Ator escolhe reagendar ou cancelar.
-3. Em caso de cancelamento, sistema libera o horário, atualizando a disponibilidade (RN10).
-4. Em caso de reagendamento, sistema solicita novo horário e repete a validação de conflitos (RF13, RF14, RF15).
+3. Em caso de cancelamento, sistema cancela a sessão ou, quando solicitado,
+   as sessões futuras ativas da recorrência (RN10).
+4. Em caso de reagendamento, sistema consulta horários livres (UC06), recebe a
+   nova data e o horário e repete a validação de conflitos (RF13, RF14, RF15).
+5. Sistema atualiza o atendimento e libera o horário anterior somente depois
+   que o novo horário passa pelas validações.
 
 **Fluxos Alternativos:**
-- FA1: Novo horário em conflito → sistema recusa a alteração e sugere horários alternativos (RF26).
-- FA2: Ação fora das permissões do papel do ator → sistema bloqueia a operação (RF19, RN14).
+- FA1: Novo horário em conflito → sistema recusa a alteração e mantém o
+  atendimento original; o ator pode consultar novamente os horários disponíveis (RF26).
+- FA2: Atendimento cancelado, concluído ou passado → sistema impede a alteração.
+- FA3: Ação fora das permissões do papel do ator → sistema bloqueia a operação (RF19, RN14).
 
 **Pós-condição:** Atendimento cancelado ou reagendado; agendas do cliente e do profissional atualizadas; status do atendimento refletido (RF24).
+
+**Observação de implementação:** A interface de cancelamento e reagendamento
+está na agenda do cliente. As rotas protegidas também autorizam o profissional
+do atendimento, a recepção e o administrador; a agenda da recepção ainda não
+apresenta controles próprios para essas operações.
 
 ### UC05 - Gerenciar Cadastros e Permissões
 
@@ -163,7 +180,7 @@ O conteúdo foi derivado da <a href="../Iniciacao/pesquisa.md">pesquisa do tema<
 
 **Atores:** Cliente, Profissional, Recepcionista, Administrador, Sistema.
 
-**Responsável (ator principal):** Cliente dono do atendimento. O profissional
+**Ator principal:** Cliente dono do atendimento. O profissional
 responsável pelo atendimento, a recepção ou o administrador também podem fazer a
 consulta conforme suas permissões.
 
@@ -191,6 +208,18 @@ atendimento está ativo e ainda não ocorreu.
 
 **Pós-condição:** Horários disponíveis apresentados; nenhum dado do atendimento
 é alterado até a confirmação do reagendamento (UC04).
+
+### Limite de escopo: responsável legal por aluno menor
+
+O sistema atual não coleta data de nascimento, não verifica a idade do aluno e
+não mantém cadastro ou vínculo de responsável legal. Portanto, não há fluxo de
+autorização ou operação por responsável legal para menores de idade nesta
+entrega. O administrador mencionado nos casos de uso é o administrador do
+estabelecimento e não substitui um responsável legal.
+
+> A documentação Swagger em `/docs/` lista as rotas do Django, incluindo páginas
+> HTML, e apresenta os schemas dos modelos como referência. Isso não significa
+> que todos os modelos tenham operações CRUD expostas por uma API REST.
 
 ## 5. Diagrama de Casos de Uso
 
@@ -246,8 +275,12 @@ Profissional --> UC03
 UC03 --> UC03_1
 
 Cliente --> UC04
+Profissional --> UC04
 Recepcionista --> UC04
-UC04 --> UC02_V : <<include>>
+Administrador --> UC04
+UC06 .> UC04 : <<extend>>
+UC06 --> UC02_V : <<include>>
+UC02_V .> UC04 : <<extend>>
 
 Administrador --> UC05
 
@@ -268,9 +301,10 @@ end note
 
 **Explicação:**
 
-- **Atores:** Cliente interage com busca, agendamento e sua própria agenda; Profissional configura disponibilidade e bloqueios; Recepcionista opera agendamentos em nome de terceiros; Administrador gerencia cadastros e permissões; Sistema é o ator de apoio que executa a validação de conflitos.
-- **Relacionamentos `<<include>>`:** confirmar um agendamento sempre inclui a validação de conflitos, tanto quando originado pelo cliente (UC02) quanto pela recepção (UC04).
-- **Relacionamentos `<<extend>>`:** os fluxos alternativos de conflito e de recorrência estendem o fluxo principal apenas quando aplicáveis.
+- **Atores:** Cliente interage com busca, agendamento e sua própria agenda; Profissional configura disponibilidade e bloqueios e pode operar os próprios atendimentos; Recepcionista opera agendamentos em nome de terceiros; Administrador gerencia cadastros e pode operar atendimentos; Sistema executa a validação de conflitos.
+- **Relacionamentos `<<include>>`:** confirmar um agendamento inclui validação de conflitos (UC02); consultar horários também verifica os conflitos para oferecer somente horários livres (UC06).
+- **Relacionamentos `<<extend>>`:** consulta de horários (UC06) e validação final de conflitos estendem o UC04 somente quando o ator escolhe reagendar, não quando escolhe cancelar.
+- Os fluxos alternativos de conflito e recorrência estendem o fluxo principal apenas quando aplicáveis.
 
 ## 6. Protótipo
 
@@ -329,3 +363,4 @@ Este documento traduz a pesquisa e os requisitos do projeto em casos de uso conc
 | Data | Versão | Descrição | Autor(es) |
 |---|---|---|---|
 | 17/09/2026 | 1.0 | Criação dos casos de uso, diagrama de casos de uso e protótipo complementar a partir do roteiro | Equipe do projeto |
+| 12/11/2026 | 1.1 | Alinhamento dos casos de uso de reagendamento e consulta de horários às permissões implementadas; registro dos limites de escopo | Equipe do projeto |
